@@ -59,3 +59,22 @@ CREATE TABLE payout_runs (
   status        TEXT NOT NULL DEFAULT 'DRAFT',
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- create user table for signup and login and identify user
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    company_id TEXT NOT NULL
+        REFERENCES companies(id)
+        ON DELETE CASCADE,
+
+    email VARCHAR(255) NOT NULL,
+    password_hash TEXT NOT NULL,
+
+    role VARCHAR(20) NOT NULL
+        CHECK (role IN ('COMPANY_ADMIN', 'FINANCE', 'AGENT')), --three rolles 
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    UNIQUE (company_id, email)
+);
