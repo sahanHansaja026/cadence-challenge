@@ -1,10 +1,14 @@
 import { randomUUID } from "crypto";
 
 import { query } from "../db/client";
-import { BookingImportRow } from "../controllers/booking.controller";
-import { CsvBookingRow } from "../schemas/booking.schema";
 
+import type {
+    CsvBookingRow,
+} from "../schemas/booking.schema";
 
+import type {
+    BookingImportRow,
+} from "../controllers/booking.controller";
 
 interface ImportError {
     row: number;

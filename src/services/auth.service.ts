@@ -146,7 +146,7 @@ function createToken(user: User): string {
         },
         secret,
         {
-            expiresIn: "1h",
+            expiresIn: "5h",
         },
     );
 }
