@@ -7,6 +7,7 @@ import companyRoutes from "./routes/company.routes";
 import userRoutes from "./routes/user.routes";
 import agentRoutes from "./routes/agent.routes";
 import bookingRoutes from "./routes/booking.routes";
+import payoutRoutes from "./routes/payout.routes";
 
 const app = express();
 app.use(
@@ -16,6 +17,12 @@ app.use(
 );
 app.use(express.json());
 
+// Payout runs
+// COMPANY_ADMIN + FINANCE
+app.use(
+    "/api/payout-runs",
+    payoutRoutes,
+);
 //bokking
 app.use(
     "/api/bookings",
