@@ -6,6 +6,7 @@ import authRoutes from "./routes/auth.routes";
 import companyRoutes from "./routes/company.routes";
 import userRoutes from "./routes/user.routes";
 import agentRoutes from "./routes/agent.routes";
+import bookingRoutes from "./routes/booking.routes";
 
 const app = express();
 app.use(
@@ -15,7 +16,11 @@ app.use(
 );
 app.use(express.json());
 
-
+//bokking
+app.use(
+    "/api/bookings",
+    bookingRoutes,
+);
 
 // agent assing
 app.use(
