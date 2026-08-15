@@ -10,17 +10,26 @@ interface ImportError {
     reason: string;
 }
 
-interface ImportResult {
+interface ImportSummary {
     accepted: number;
     rejected: number;
+    duplicates: number;
     errors: ImportError[];
 }
 
+interface ImportResult {
+    summary: ImportSummary;
+    rejections: ImportError[];
+}
+
 function Booking_infomation() {
-    const { isLoading } = useAuth();
+    const {
+        user,
+        isLoading,
+    } = useAuth();
 
     const {
-        financeAuthorization,
+        adminAuthorization,
     } = useAuthorizationCheck();
 
     const [file, setFile] =
@@ -37,12 +46,12 @@ function Booking_infomation() {
 
     useEffect(() => {
         if (!isLoading) {
-            financeAuthorization();
+            adminAuthorization();
         }
     }, [isLoading]);
 
     const handleFileChange = (
-        event: React.ChangeEvent<HTMLInputElement>
+        event: React.ChangeEvent<HTMLInputElement>,
     ) => {
         const selectedFile =
             event.target.files?.[0] ?? null;
@@ -54,16 +63,12 @@ function Booking_infomation() {
 
     const handleImport = async () => {
         if (!file) {
-            setError(
-                "Please select a CSV file."
-            );
+            setError("Please select a CSV file.");
             return;
         }
 
-        if (!file.name.endsWith(".csv")) {
-            setError(
-                "Please select a CSV file."
-            );
+        if (!file.name.toLowerCase().endsWith(".csv")) {
+            setError("Please select a CSV file.");
             return;
         }
 
@@ -74,40 +79,35 @@ function Booking_infomation() {
 
             const formData = new FormData();
 
-            formData.append(
-                "file",
-                file
-            );
+            formData.append("file", file);
 
             const token =
                 localStorage.getItem("token");
 
-            const response =
-                await api.post(
-                    "/bookings/import",
-                    formData,
-                    {
-                        headers: {
-                            Authorization:
-                                `Bearer ${token}`,
-                        },
-                    }
-                );
+            const response = await api.post(
+                "/bookings/import",
+                formData,
+                {
+                    headers: {
+                        Authorization:
+                            `Bearer ${ token } `,
+                    },
+                },
+            );
 
             setResult(
-                response.data.data
+                response.data.data,
             );
 
         } catch (error: any) {
             console.error(
                 "Booking import error:",
-                error
+                error,
             );
 
             setError(
-                error?.response?.data?.error
-                    ?.message ||
-                "Failed to import bookings."
+                error?.response?.data?.error?.message ||
+                "Failed to import bookings.",
             );
 
         } finally {
@@ -123,6 +123,13 @@ function Booking_infomation() {
         );
     }
 
+    const allErrors = result
+        ? [
+            ...(result.summary?.errors ?? []),
+            ...(result.rejections ?? []),
+        ]
+        : [];
+
     return (
         <div className="flex min-h-screen bg-gray-50">
 
@@ -137,13 +144,76 @@ function Booking_infomation() {
                 <div className="mb-8">
 
                     <h1 className="text-3xl font-bold text-gray-900">
-                        Booking Imports
+                        Booking Information
                     </h1>
 
-                    <p className="mt-2 text-sm text-gray-500">
-                        Import booking information
-                        from a CSV file.
+                    <p className="mt-2 text-gray-500">
+                        Import and validate booking information.
                     </p>
+
+                </div>
+
+
+                {/* Logged-in User */}
+
+                <div className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
+
+                    <h2 className="text-lg font-semibold text-gray-900">
+                        Importing For
+                    </h2>
+
+                    <p className="mt-1 text-sm text-gray-500">
+                        The company is automatically determined from
+                        your authenticated account.
+                    </p>
+
+                    <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+
+                        {/* Email */}
+
+                        <div className="rounded-lg bg-gray-50 p-4">
+
+                            <p className="text-xs font-semibold uppercase text-gray-500">
+                                User
+                            </p>
+
+                            <p className="mt-1 font-medium text-gray-900">
+                                {user?.email ?? "Unknown"}
+                            </p>
+
+                        </div>
+
+
+                        {/* Role */}
+
+                        <div className="rounded-lg bg-gray-50 p-4">
+
+                            <p className="text-xs font-semibold uppercase text-gray-500">
+                                Role
+                            </p>
+
+                            <p className="mt-1 font-medium text-gray-900">
+                                {user?.role ?? "Unknown"}
+                            </p>
+
+                        </div>
+
+
+                        {/* Company */}
+
+                        <div className="rounded-lg bg-blue-50 p-4">
+
+                            <p className="text-xs font-semibold uppercase text-blue-600">
+                                Company ID
+                            </p>
+
+                            <p className="mt-1 font-medium text-blue-900 break-all">
+                                {user?.companyId ?? "Unknown"}
+                            </p>
+
+                        </div>
+
+                    </div>
 
                 </div>
 
@@ -157,8 +227,8 @@ function Booking_infomation() {
                     </h2>
 
                     <p className="mt-1 text-sm text-gray-500">
-                        Select a CSV file containing
-                        your booking data.
+                        Upload a CSV containing booking information.
+                        You do not need to provide a company ID.
                     </p>
 
 
@@ -167,9 +237,7 @@ function Booking_infomation() {
                         <input
                             type="file"
                             accept=".csv"
-                            onChange={
-                                handleFileChange
-                            }
+                            onChange={handleFileChange}
                             className="block w-full rounded-lg border border-gray-300 p-3 text-sm"
                         />
 
@@ -207,9 +275,7 @@ function Booking_infomation() {
                         <Button
                             type="button"
                             variant="primary"
-                            onClick={
-                                handleImport
-                            }
+                            onClick={handleImport}
                             disabled={loading}
                         >
                             {loading
@@ -222,7 +288,7 @@ function Booking_infomation() {
                 </div>
 
 
-                {/* Import result */}
+                {/* Result */}
 
                 {result && (
                     <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6">
@@ -232,7 +298,9 @@ function Booking_infomation() {
                         </h2>
 
 
-                        <div className="mt-5 grid grid-cols-2 gap-4">
+                        {/* Summary */}
+
+                        <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
 
                             <div className="rounded-lg bg-green-50 p-4">
 
@@ -241,7 +309,7 @@ function Booking_infomation() {
                                 </p>
 
                                 <p className="mt-1 text-2xl font-bold text-green-600">
-                                    {result.accepted}
+                                    {result.summary.accepted}
                                 </p>
 
                             </div>
@@ -254,7 +322,20 @@ function Booking_infomation() {
                                 </p>
 
                                 <p className="mt-1 text-2xl font-bold text-red-600">
-                                    {result.rejected}
+                                    {result.summary.rejected}
+                                </p>
+
+                            </div>
+
+
+                            <div className="rounded-lg bg-yellow-50 p-4">
+
+                                <p className="text-sm text-gray-500">
+                                    Duplicates
+                                </p>
+
+                                <p className="mt-1 text-2xl font-bold text-yellow-600">
+                                    {result.summary.duplicates}
                                 </p>
 
                             </div>
@@ -262,13 +343,13 @@ function Booking_infomation() {
                         </div>
 
 
-                        {/* Rejected rows */}
+                        {/* Problems */}
 
-                        {result.errors.length > 0 && (
+                        {allErrors.length > 0 && (
                             <div className="mt-6">
 
                                 <h3 className="mb-3 font-semibold text-gray-900">
-                                    Rejected Rows
+                                    Import Problems
                                 </h3>
 
                                 <div className="overflow-hidden rounded-lg border border-gray-200">
@@ -280,7 +361,7 @@ function Booking_infomation() {
                                             <tr>
 
                                                 <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">
-                                                    Row
+                                                    CSV Row
                                                 </th>
 
                                                 <th className="px-4 py-3 text-xs font-semibold uppercase text-gray-500">
@@ -293,33 +374,22 @@ function Booking_infomation() {
 
                                         <tbody className="divide-y divide-gray-200">
 
-                                            {result.errors.map(
-                                                (
-                                                    item,
-                                                    index
-                                                ) => (
-
+                                            {allErrors.map(
+                                                (item, index) => (
                                                     <tr
-                                                        key={
-                                                            index
-                                                        }
+                                                        key={`${ item.row } -${ index } `}
                                                     >
 
-                                                        <td className="px-4 py-3 text-sm">
-                                                            {
-                                                                item.row
-                                                            }
+                                                        <td className="px-4 py-3 text-sm font-medium">
+                                                            {item.row}
                                                         </td>
 
                                                         <td className="px-4 py-3 text-sm text-red-600">
-                                                            {
-                                                                item.reason
-                                                            }
+                                                            {item.reason}
                                                         </td>
 
                                                     </tr>
-
-                                                )
+                                                ),
                                             )}
 
                                         </tbody>
@@ -341,3 +411,4 @@ function Booking_infomation() {
 }
 
 export default Booking_infomation;
+

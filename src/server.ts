@@ -5,6 +5,7 @@ import cors from "cors";
 import authRoutes from "./routes/auth.routes";
 import companyRoutes from "./routes/company.routes";
 import userRoutes from "./routes/user.routes";
+import agentRoutes from "./routes/agent.routes";
 
 const app = express();
 app.use(
@@ -13,6 +14,14 @@ app.use(
     }),
 );
 app.use(express.json());
+
+
+
+// agent assing
+app.use(
+    "/api/agents",
+    agentRoutes,
+);
 
 // company admin create finace and agents
 app.use(
