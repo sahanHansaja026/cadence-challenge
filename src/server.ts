@@ -8,6 +8,7 @@ import userRoutes from "./routes/user.routes";
 import agentRoutes from "./routes/agent.routes";
 import bookingRoutes from "./routes/booking.routes";
 import payoutRoutes from "./routes/payout.routes";
+import bookingManagementRoutes from "./routes/booking-management.routes";
 
 const app = express();
 app.use(
@@ -27,6 +28,11 @@ app.use(
 app.use(
     "/api/bookings",
     bookingRoutes,
+);
+
+app.use(
+    "/api/bookings",
+    bookingManagementRoutes,
 );
 
 // agent assing

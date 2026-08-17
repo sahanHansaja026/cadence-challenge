@@ -12,7 +12,7 @@ const menuItems = [
     },
     {
         label: "My Bookings",
-        path: "/agent/bookings",
+        path: "/viewbookings_agent",
     },
     {
         label: "My Payout Statements",

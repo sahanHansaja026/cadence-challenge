@@ -15,6 +15,10 @@ const menuItems = [
         path: "/finance/booking-imports",
     },
     {
+        label: "Booking View",
+        path: "/viewbookings_finace",
+    },
+    {
         label: "Commission Rules",
         path: "/finance/commission-rules",
     },

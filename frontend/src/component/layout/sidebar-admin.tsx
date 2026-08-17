@@ -11,10 +11,12 @@ const menuItems = [
     "User Management",
     "view users",
     "Booking Imports",
+    "Booking Details",
     "Commission Rules",
     "Payout Runs",
     "Refunds",
     "Reports & Statements",
+    
 ];
 
 const routes: Record<string, string> = {
@@ -22,6 +24,7 @@ const routes: Record<string, string> = {
     "User Management": "/usermangemtn",
     "view users":"/viewusers",
     "Booking Imports": "/bookinginfo",
+    "Booking Details": "/viewbookings",
     "Commission Rules": "/admin/commission-rules",
     "Payout Runs": "/admin/payout-runs",
     "Refunds": "/admin/refunds",
