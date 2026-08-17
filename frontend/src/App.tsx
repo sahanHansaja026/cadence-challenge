@@ -14,6 +14,7 @@ import ViewBookings_agents from "./pages/agent/bookingdetails";
 import View_Bookings_finace from "./pages/finace/bookingdetails";
 import EditBooking from "./pages/admin/booking_edit";
 import EditBookingFinance from "./pages/finace/booking_edit";
+import CommissionRules from "./pages/admin/commion_rule";
 
 
 function App() {
@@ -35,6 +36,7 @@ function App() {
         <Route path="/viewbookings_finace" element={<View_Bookings_finace />} />
         <Route path="/editbooking/:id" element={<EditBooking />} />
         <Route path="/editbooking_finace/:id" element={<EditBookingFinance />} />
+        <Route path="/commtionrule" element={<CommissionRules />} />
 
       </Routes>
 

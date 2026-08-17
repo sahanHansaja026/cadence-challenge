@@ -25,7 +25,7 @@ const routes: Record<string, string> = {
     "view users":"/viewusers",
     "Booking Imports": "/bookinginfo",
     "Booking Details": "/viewbookings",
-    "Commission Rules": "/admin/commission-rules",
+    "Commission Rules": "/commtionrule",
     "Payout Runs": "/admin/payout-runs",
     "Refunds": "/admin/refunds",
     "Reports & Statements": "/admin/reports",

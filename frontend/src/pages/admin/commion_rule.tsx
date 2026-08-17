@@ -576,7 +576,6 @@ function CommissionRules() {
 
                             <Input
                                 label="Rule Name"
-                                className="text-gray-900"
                                 type="text"
                                 placeholder="Standard Travel Commission"
                                 value={
