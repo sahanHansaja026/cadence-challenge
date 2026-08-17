@@ -5,6 +5,7 @@ import SidebarAdmin from "../../component/layout/sidebar-admin";
 import Button from "../../component/ui/Button";
 import api from "../../services/api";
 import { useNavigate } from "react-router-dom";
+import SidebarFinance from "../../component/layout/sidebar-finace";
 
 type UserRole =
     | "COMPANY_ADMIN"
@@ -161,7 +162,7 @@ function View_Bookings_finace() {
         <div className="flex min-h-screen bg-gray-50">
 
             {/* Sidebar */}
-            <SidebarAdmin
+            <SidebarFinance
                 activeItem="Booking Details"
             />
 

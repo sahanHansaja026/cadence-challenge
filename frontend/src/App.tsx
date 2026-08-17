@@ -15,7 +15,9 @@ import View_Bookings_finace from "./pages/finace/bookingdetails";
 import EditBooking from "./pages/admin/booking_edit";
 import EditBookingFinance from "./pages/finace/booking_edit";
 import CommissionRules from "./pages/admin/commion_rule";
-
+import PayoutRuns from "./pages/admin/payoutrun";
+import PayoutRuns_finace from "./pages/finace/payoutrun";
+import Booking_Import_finace from "./pages/finace/booking";
 
 function App() {
   return (
@@ -37,7 +39,9 @@ function App() {
         <Route path="/editbooking/:id" element={<EditBooking />} />
         <Route path="/editbooking_finace/:id" element={<EditBookingFinance />} />
         <Route path="/commtionrule" element={<CommissionRules />} />
-
+        <Route path="/payoutrun" element={<PayoutRuns />} />
+        <Route path="/payoutrun_finace" element={<PayoutRuns_finace />} />
+        <Route path="/booking_finace" element={<Booking_Import_finace />} />
       </Routes>
 
 
