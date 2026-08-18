@@ -3,6 +3,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useAuthorizationCheck } from "../../authorization/AuthorizationCheck";
 import SidebarAdmin from "../../component/layout/sidebar-admin";
 import api from "../../services/api";
+import SidebarAgent from "../../component/layout/sidebar-agent";
 
 interface Booking {
     id: string;
@@ -98,7 +99,7 @@ function ViewBookings_agents() {
         <div className="flex min-h-screen bg-gray-50">
 
             {/* Sidebar */}
-            <SidebarAdmin
+            <SidebarAgent
                 activeItem="Booking Details"
             />
 

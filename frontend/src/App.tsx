@@ -18,6 +18,8 @@ import CommissionRules from "./pages/admin/commion_rule";
 import PayoutRuns from "./pages/admin/payoutrun";
 import PayoutRuns_finace from "./pages/finace/payoutrun";
 import Booking_Import_finace from "./pages/finace/booking";
+import Refunds from "./pages/admin/refunds";
+import Refunds_finance from "./pages/finace/refunds";
 
 function App() {
   return (
@@ -42,6 +44,8 @@ function App() {
         <Route path="/payoutrun" element={<PayoutRuns />} />
         <Route path="/payoutrun_finace" element={<PayoutRuns_finace />} />
         <Route path="/booking_finace" element={<Booking_Import_finace />} />
+        <Route path="/refundadmin" element={<Refunds />} />
+        <Route path="/refundfinace" element={<Refunds_finance />} />
       </Routes>
 
 

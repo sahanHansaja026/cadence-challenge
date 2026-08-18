@@ -10,6 +10,7 @@ import bookingRoutes from "./routes/booking.routes";
 import payoutRoutes from "./routes/payout.routes";
 import bookingManagementRoutes from "./routes/booking-management.routes";
 import commissionRuleRoutes from "./routes/commissionRule.routes";
+import refundRoutes from "./routes/refund.routes";
 
 const app = express();
 app.use(
@@ -18,6 +19,13 @@ app.use(
     }),
 );
 app.use(express.json());
+// refound
+//refund
+app.use(
+    "/api/refunds",
+    refundRoutes,
+);
+
 // commiton rule
 app.use(
     "/api/commission-rules",

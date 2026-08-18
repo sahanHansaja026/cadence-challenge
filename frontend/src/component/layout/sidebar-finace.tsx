@@ -24,7 +24,7 @@ const menuItems = [
     },
     {
         label: "Refunds",
-        path: "/finance/refunds",
+        path: "/refundfinace",
     },
     {
         label: "Financial Reports",
