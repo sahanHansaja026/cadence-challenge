@@ -28,7 +28,7 @@ const routes: Record<string, string> = {
     "Commission Rules": "/commtionrule",
     "Payout Runs": "/payoutrun",
     "Refunds": "/refundadmin",
-    "Reports & Statements": "/admin/reports",
+    "Reports & Statements": "/reportadmin",
     "Settings": "/admin/settings",
 };
 

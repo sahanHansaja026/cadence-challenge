@@ -23,6 +23,7 @@ import Refunds_finance from "./pages/finace/refunds";
 import CreateRefund from "./pages/admin/create_refund";
 import EditRefund from "./pages/admin/editrefund";
 import AgentPayouts from "./pages/agent/payouts";
+import Report from "./pages/admin/report";
 
 function App() {
   return (
@@ -52,7 +53,7 @@ function App() {
         <Route path="/editrefund/:id" element={<EditRefund />} />
         <Route path="/refundfinace" element={<Refunds_finance />} />
         <Route path="/mypayout" element={<AgentPayouts />} />
-        
+        <Route path="/reportadmin" element={<Report />} />
       </Routes>
 
 

@@ -11,6 +11,7 @@ import payoutRoutes from "./routes/payout.routes";
 import bookingManagementRoutes from "./routes/booking-management.routes";
 import commissionRuleRoutes from "./routes/commissionRule.routes";
 import refundRoutes from "./routes/refund.routes";
+import reportRoutes from "./routes/report.routes";
 
 const app = express();
 app.use(
@@ -19,6 +20,11 @@ app.use(
     }),
 );
 app.use(express.json());
+//get report
+app.use(
+    "/api/reports",
+    reportRoutes,
+);
 // refound
 //refund
 app.use(
