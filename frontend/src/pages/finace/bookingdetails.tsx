@@ -163,7 +163,7 @@ function View_Bookings_finace() {
 
             {/* Sidebar */}
             <SidebarFinance
-                activeItem="Booking Details"
+                activeItem="Booking View"
             />
 
             {/* Main */}

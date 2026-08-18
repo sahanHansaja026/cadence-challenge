@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useAuthorizationCheck } from "../../authorization/AuthorizationCheck";
-import SidebarAdmin from "../../component/layout/sidebar-admin";
 import api from "../../services/api";
 import SidebarAgent from "../../component/layout/sidebar-agent";
 
@@ -151,7 +150,7 @@ function ViewBookings_agents() {
                          */
                         <div className="w-full overflow-x-auto">
 
-                            <table className="min-w-[1000px] w-full text-left">
+                            <table className="min-w-250 w-full text-left">
 
                                 <thead className="border-b border-gray-200 bg-gray-50">
 

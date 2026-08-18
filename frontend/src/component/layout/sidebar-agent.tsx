@@ -20,7 +20,7 @@ const menuItems = [
     },
     {
         label: "Export Statements",
-        path: "/agent/export-statements",
+        path: "/reportagent",
     },
 ];
 

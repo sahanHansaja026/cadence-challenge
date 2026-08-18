@@ -152,7 +152,7 @@ function Reports() {
         <div className="flex min-h-screen bg-gray-50">
 
             <SidebarAdmin
-                activeItem="Reports"
+                activeItem="Reports & Statements"
             />
 
 

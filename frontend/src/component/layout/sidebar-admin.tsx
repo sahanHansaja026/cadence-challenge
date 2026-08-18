@@ -16,20 +16,20 @@ const menuItems = [
     "Payout Runs",
     "Refunds",
     "Reports & Statements",
-    
+
 ];
 
 const routes: Record<string, string> = {
     "Dashboard": "/admin/dashboard",
     "User Management": "/usermangemtn",
-    "view users":"/viewusers",
+    "view users": "/viewusers",
     "Booking Imports": "/bookinginfo",
     "Booking Details": "/viewbookings",
     "Commission Rules": "/commtionrule",
     "Payout Runs": "/payoutrun",
     "Refunds": "/refundadmin",
     "Reports & Statements": "/reportadmin",
-    "Settings": "/admin/settings",
+
 };
 
 const SidebarAdmin: React.FC<SidebarProps> = ({
@@ -82,8 +82,8 @@ const SidebarAdmin: React.FC<SidebarProps> = ({
                                     handleNavigation(item)
                                 }
                                 className={`w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium transition ${isActive
-                                        ? "bg-gray-900 text-white"
-                                        : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                                    ? "bg-gray-900 text-white"
+                                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                                     }`}
                             >
                                 {item}
