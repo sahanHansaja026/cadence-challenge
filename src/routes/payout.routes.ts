@@ -12,6 +12,7 @@ import {
     createPayoutRunController,
     getPayoutRunsController,
     getPayoutRunController,
+    getAgentPayoutsController,
 } from "../controllers/payout.controller";
 
 const router = Router();
@@ -35,6 +36,23 @@ router.get(
     ),
     getPayoutRunsController,
 );
+/*
+ * GET AUTHENTICATED AGENT PAYOUTS
+ *
+ * GET /api/payouts/agent/payouts
+ */
+router.get(
+    "/agent/payouts",
+    authenticate,
+    getAgentPayoutsController,
+);
+
+
+/*
+ * GET ONE PAYOUT RUN
+ *
+ * GET /api/payouts/:id
+ */
 
 router.get(
     "/:id",

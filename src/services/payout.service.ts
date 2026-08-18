@@ -29,14 +29,12 @@ interface PayoutLineItem {
 /*
  * CREATE PAYOUT RUN
  *
- * 1. Validate period
- * 2. Create payout run
- * 3. Find bookings
- * 4. Find commission rules
- * 5. Calculate commission
- * 6. Create payout line items
- * 7. Calculate total from line items
- * 8. Update payout run
+ * 1. Create payout run
+ * 2. Find active bookings in the period
+ * 3. Find matching commission rules
+ * 4. Calculate commission
+ * 5. Create payout line items
+ * 6. Update total payout amount
  */
 export async function createPayoutRun(
     companyId: string,
@@ -83,7 +81,7 @@ export async function createPayoutRun(
 
 
     /*
-     * Create payout run ID.
+     * Generate payout run ID.
      */
     const payoutRunId =
         `run_${randomUUID()}`;
@@ -145,35 +143,29 @@ export async function createPayoutRun(
 
 
     /*
-     * Find eligible bookings.
-     *
-     * IMPORTANT:
-     *
-     * We only filter by company and date here.
-     *
-     * We do NOT force status = ACTIVE.
-     *
-     * This avoids the situation where your
-     * actual booking status values are different
-     * and therefore every booking gets skipped.
+     * Get active bookings
+     * inside payout period.
      */
     const bookings =
         await query<{
-            id: string;
             agent_code: string;
-            product_code: string | null;
-            amount: string;
-            booking_date: string;
-            status: string;
+            product_code: string;
+            booking_count: number;
+            gross_volume: string;
         }>(
             `
             SELECT
-                id,
                 agent_code,
                 product_code,
-                amount,
-                booking_date,
-                status
+
+                COUNT(*)::integer
+                    AS booking_count,
+
+                COALESCE(
+                    SUM(amount),
+                    0
+                )::numeric
+                    AS gross_volume
 
             FROM bookings
 
@@ -181,14 +173,16 @@ export async function createPayoutRun(
 
               AND booking_date >= $2::date
 
-              AND booking_date < (
-                    $3::date + INTERVAL '1 day'
-              )
+              AND booking_date <= $3::date
+
+              AND status = 'ACTIVE'
+
+            GROUP BY
+                agent_code,
+                product_code
 
             ORDER BY
-                agent_code,
-                booking_date,
-                id
+                agent_code
             `,
             [
                 companyId,
@@ -200,80 +194,28 @@ export async function createPayoutRun(
 
     /*
      * No bookings.
+     *
+     * The payout run is still valid.
+     * Its total remains 0.
      */
     if (bookings.length === 0) {
-
-        /*
-         * Keep total at zero.
-         */
-        await query(
-            `
-            UPDATE payout_runs
-            SET total_amount = 0
-            WHERE id = $1
-              AND company_id = $2
-            `,
-            [
-                payoutRunId,
-                companyId,
-            ],
-        );
-
-
-        const emptyRun =
-            await getPayoutRunById(
-                payoutRunId,
-                companyId,
-            );
-
-
-        if (!emptyRun) {
-            throw new Error(
-                "PAYOUT_RUN_NOT_FOUND_AFTER_CREATION",
-            );
-        }
-
-
-        return emptyRun;
+        return payoutRun;
     }
 
 
+    let totalCommission = 0;
+
+
     /*
-     * Process every booking individually.
-     *
-     * This is safer than grouping first because
-     * commission rules may depend on product
-     * and booking amount.
+     * Process every
+     * agent/product group.
      */
     for (const booking of bookings) {
 
-        /*
-         * Validate agent.
-         */
-        if (
-            !booking.agent_code
-        ) {
-            continue;
-        }
-
-
-        /*
-         * Convert booking amount.
-         */
-        const bookingAmount =
+        const grossVolume =
             Number(
-                booking.amount,
+                booking.gross_volume,
             );
-
-
-        if (
-            !Number.isFinite(
-                bookingAmount,
-            ) ||
-            bookingAmount <= 0
-        ) {
-            continue;
-        }
 
 
         /*
@@ -281,24 +223,18 @@ export async function createPayoutRun(
          *
          * Product-specific rule has priority.
          *
-         * Generic rule is used when
-         * product_code IS NULL.
+         * Generic rule:
+         * product_code IS NULL
          */
         const rules =
             await query<{
                 id: string;
                 commission_rate: string;
-                product_code: string | null;
-                min_amount: string;
-                max_amount: string | null;
             }>(
                 `
                 SELECT
                     id,
-                    commission_rate,
-                    product_code,
-                    min_amount,
-                    max_amount
+                    commission_rate
 
                 FROM commission_rules
 
@@ -308,25 +244,25 @@ export async function createPayoutRun(
 
                   AND (
                         effective_to IS NULL
-                        OR effective_to >= $2::date
+                        OR effective_to >= $3::date
                   )
 
-                  AND min_amount <= $3::numeric
+                  AND min_amount <= $4::numeric
 
                   AND (
                         max_amount IS NULL
-                        OR max_amount >= $3::numeric
+                        OR max_amount >= $4::numeric
                   )
 
                   AND (
-                        product_code = $4
+                        product_code = $5
                         OR product_code IS NULL
                   )
 
                 ORDER BY
 
                     CASE
-                        WHEN product_code = $4
+                        WHEN product_code = $5
                         THEN 0
                         ELSE 1
                     END,
@@ -341,29 +277,30 @@ export async function createPayoutRun(
                 `,
                 [
                     companyId,
-                    booking.booking_date,
-                    bookingAmount,
+                    periodStart,
+                    periodEnd,
+                    grossVolume,
                     booking.product_code,
                 ],
             );
 
 
+        /*
+         * No matching commission rule.
+         *
+         * Skip this booking group.
+         */
         const matchingRule =
             rules[0];
 
 
-        /*
-         * No commission rule.
-         *
-         * Skip this booking.
-         */
         if (!matchingRule) {
             continue;
         }
 
 
         /*
-         * Commission rate.
+         * Commission percentage.
          */
         const commissionRate =
             Number(
@@ -371,46 +308,42 @@ export async function createPayoutRun(
             );
 
 
-        if (
-            !Number.isFinite(
-                commissionRate,
-            ) ||
-            commissionRate < 0
-        ) {
-            continue;
-        }
-
-
         /*
          * Calculate commission.
          *
          * Example:
          *
-         * Booking = 100,000
-         * Rate = 5%
+         * Gross volume = 100000
+         * Rate = 5
          *
-         * Commission = 5,000
+         * Commission =
+         * 100000 * 5 / 100
+         *
+         * = 5000
          */
         const commissionAmount =
             Number(
                 (
-                    bookingAmount *
+                    grossVolume *
                     commissionRate /
                     100
                 ).toFixed(2),
             );
 
 
+        totalCommission +=
+            commissionAmount;
+
+
         /*
-         * Check whether the agent already
-         * has a payout line.
+         * Check whether this agent
+         * already has a payout line.
          */
-        const existingLines =
+        const existingLine =
             await query<{
                 id: string;
                 booking_count: number;
                 gross_volume: string;
-                commission_rate: string;
                 commission_amount: string;
             }>(
                 `
@@ -418,13 +351,11 @@ export async function createPayoutRun(
                     id,
                     booking_count,
                     gross_volume,
-                    commission_rate,
                     commission_amount
 
                 FROM payout_line_items
 
                 WHERE payout_run_id = $1
-
                   AND agent_code = $2
 
                 LIMIT 1
@@ -436,14 +367,21 @@ export async function createPayoutRun(
             );
 
 
-        const existingLine =
-            existingLines[0];
+        /*
+         * Get existing line safely.
+         *
+         * This avoids:
+         *
+         * Object is possibly 'undefined'
+         */
+        const currentLine =
+            existingLine[0];
 
 
         /*
          * Existing agent line.
          */
-        if (existingLine) {
+        if (currentLine) {
 
             await query(
                 `
@@ -451,25 +389,28 @@ export async function createPayoutRun(
 
                 SET
                     booking_count =
-                        booking_count + 1,
+                        booking_count + $1,
 
                     gross_volume =
-                        gross_volume + $1,
+                        gross_volume + $2,
 
                     commission_amount =
-                        commission_amount + $2
+                        commission_amount + $3,
 
-                WHERE id = $3
+                    commission_rate = $4
+
+                WHERE id = $5
                 `,
                 [
-                    bookingAmount,
+                    booking.booking_count,
+                    grossVolume,
                     commissionAmount,
-                    existingLine.id,
+                    commissionRate,
+                    currentLine.id,
                 ],
             );
 
         }
-
 
         /*
          * First line for this agent.
@@ -506,8 +447,8 @@ export async function createPayoutRun(
                     lineId,
                     payoutRunId,
                     booking.agent_code,
-                    1,
-                    bookingAmount,
+                    booking.booking_count,
+                    grossVolume,
                     commissionRate,
                     commissionAmount,
                 ],
@@ -517,41 +458,7 @@ export async function createPayoutRun(
 
 
     /*
-     * IMPORTANT:
-     *
-     * Calculate payout total from the
-     * actual line items in PostgreSQL.
-     */
-    const totalResult =
-        await query<{
-            total: string;
-        }>(
-            `
-            SELECT
-                COALESCE(
-                    SUM(
-                        commission_amount
-                    ),
-                    0
-                ) AS total
-
-            FROM payout_line_items
-
-            WHERE payout_run_id = $1
-            `,
-            [
-                payoutRunId,
-            ],
-        );
-
-
-    const totalCommission =
-        totalResult[0]?.total ??
-        "0.00";
-
-
-    /*
-     * Update payout run total.
+     * Update payout total.
      */
     const updatedRuns =
         await query<PayoutRun>(
@@ -575,7 +482,7 @@ export async function createPayoutRun(
                 created_at
             `,
             [
-                totalCommission,
+                totalCommission.toFixed(2),
                 payoutRunId,
                 companyId,
             ],
@@ -671,6 +578,8 @@ export async function getPayoutRunById(
 
 /*
  * GET PAYOUT LINE ITEMS
+ *
+ * Used by the payout details/view page.
  */
 export async function getPayoutLineItems(
     payoutRunId: string,
@@ -694,7 +603,6 @@ export async function getPayoutLineItems(
             ON pr.id = pli.payout_run_id
 
         WHERE pli.payout_run_id = $1
-
           AND pr.company_id = $2
 
         ORDER BY
@@ -702,6 +610,89 @@ export async function getPayoutLineItems(
         `,
         [
             payoutRunId,
+            companyId,
+        ],
+    );
+}
+
+/*
+ * GET PAYOUTS FOR AUTHENTICATED AGENT
+ *
+ * The agent is identified using:
+ *
+ * req.user.userId
+ *        ↓
+ * agents.user_id
+ *        ↓
+ * agents.agent_code
+ *        ↓
+ * payout_line_items.agent_code
+ *
+ * The company_id is also checked for tenant isolation.
+ */
+export async function getAgentPayouts(
+    companyId: string,
+    userId: string,
+): Promise<
+    Array<{
+        payout_run_id: string;
+        run_no: number;
+        period_start: string;
+        period_end: string;
+        status: "DRAFT" | "FINALISED";
+        agent_code: string;
+        booking_count: number;
+        gross_volume: string;
+        commission_rate: string;
+        commission_amount: string;
+    }>
+> {
+
+    return await query<{
+        payout_run_id: string;
+        run_no: number;
+        period_start: string;
+        period_end: string;
+        status: "DRAFT" | "FINALISED";
+        agent_code: string;
+        booking_count: number;
+        gross_volume: string;
+        commission_rate: string;
+        commission_amount: string;
+    }>(
+        `
+        SELECT
+            pr.id AS payout_run_id,
+            pr.run_no,
+            pr.period_start,
+            pr.period_end,
+            pr.status,
+
+            pli.agent_code,
+            pli.booking_count,
+            pli.gross_volume,
+            pli.commission_rate,
+            pli.commission_amount
+
+        FROM agents a
+
+        INNER JOIN payout_line_items pli
+            ON pli.agent_code = a.agent_code
+
+        INNER JOIN payout_runs pr
+            ON pr.id = pli.payout_run_id
+
+        WHERE a.user_id = $1
+
+          AND a.company_id = $2
+
+          AND pr.company_id = $2
+
+        ORDER BY
+            pr.created_at DESC
+        `,
+        [
+            userId,
             companyId,
         ],
     );

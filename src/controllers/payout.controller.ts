@@ -9,6 +9,7 @@ import {
 
 import {
     createPayoutRun,
+    getAgentPayouts,
     getPayoutRunById,
     getPayoutRuns,
 } from "../services/payout.service";
@@ -272,6 +273,86 @@ export async function getPayoutRunController(
 
         console.error(
             "Get payout run error:",
+            error,
+        );
+
+
+        res.status(500).json({
+            error: {
+                code:
+                    "INTERNAL_SERVER_ERROR",
+                message:
+                    "Something went wrong.",
+            },
+        });
+    }
+}
+
+/*
+ * GET AGENT PAYOUTS
+ *
+ * GET /api/agent/payouts
+ *
+ * The authenticated agent can only see
+ * their own payouts.
+ *
+ * Agent code is NOT received from frontend.
+ */
+export async function getAgentPayoutsController(
+    req: Request,
+    res: Response,
+): Promise<void> {
+
+    if (!req.user) {
+
+        res.status(401).json({
+            error: {
+                code: "UNAUTHORIZED",
+                message:
+                    "Authentication required.",
+            },
+        });
+
+        return;
+    }
+
+
+    /*
+     * Only AGENT users can access this endpoint.
+     */
+    if (req.user.role !== "AGENT") {
+
+        res.status(403).json({
+            error: {
+                code: "FORBIDDEN",
+                message:
+                    "Only agents can access their payouts.",
+            },
+        });
+
+        return;
+    }
+
+
+    try {
+
+        const payouts =
+            await getAgentPayouts(
+                req.user.companyId,
+                req.user.userId
+            );
+
+
+        res.status(200).json({
+            data: {
+                payouts,
+            },
+        });
+
+    } catch (error: unknown) {
+
+        console.error(
+            "Get agent payouts error:",
             error,
         );
 

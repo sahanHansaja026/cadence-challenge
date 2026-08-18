@@ -16,7 +16,7 @@ const menuItems = [
     },
     {
         label: "My Payout Statements",
-        path: "/agent/payout-statements",
+        path: "/mypayout",
     },
     {
         label: "Export Statements",

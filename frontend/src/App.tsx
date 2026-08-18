@@ -20,6 +20,9 @@ import PayoutRuns_finace from "./pages/finace/payoutrun";
 import Booking_Import_finace from "./pages/finace/booking";
 import Refunds from "./pages/admin/refunds";
 import Refunds_finance from "./pages/finace/refunds";
+import CreateRefund from "./pages/admin/create_refund";
+import EditRefund from "./pages/admin/editrefund";
+import AgentPayouts from "./pages/agent/payouts";
 
 function App() {
   return (
@@ -45,7 +48,11 @@ function App() {
         <Route path="/payoutrun_finace" element={<PayoutRuns_finace />} />
         <Route path="/booking_finace" element={<Booking_Import_finace />} />
         <Route path="/refundadmin" element={<Refunds />} />
+        <Route path="/createrefund" element={<CreateRefund />} />
+        <Route path="/editrefund/:id" element={<EditRefund />} />
         <Route path="/refundfinace" element={<Refunds_finance />} />
+        <Route path="/mypayout" element={<AgentPayouts />} />
+        
       </Routes>
 
 

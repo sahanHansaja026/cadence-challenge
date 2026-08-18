@@ -81,28 +81,34 @@ function Booking_infomation() {
 
             formData.append("file", file);
 
-            const token =
-                localStorage.getItem("token");
+            const token = localStorage.getItem("token");
+
+            if (!token) {
+                setError("You are not authenticated.");
+                return;
+            }
 
             const response = await api.post(
                 "/bookings/import",
                 formData,
                 {
                     headers: {
-                        Authorization:
-                            `Bearer ${ token } `,
+                        Authorization: `Bearer ${token}`,
                     },
                 },
             );
 
-            setResult(
-                response.data.data,
-            );
+            setResult(response.data.data);
 
         } catch (error: any) {
             console.error(
                 "Booking import error:",
                 error,
+            );
+
+            console.error(
+                "Backend response:",
+                error?.response?.data,
             );
 
             setError(
