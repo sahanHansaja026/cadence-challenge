@@ -13,6 +13,7 @@ import commissionRuleRoutes from "./routes/commissionRule.routes";
 import refundRoutes from "./routes/refund.routes";
 import reportRoutes from "./routes/report.routes";
 import passwordRoutes from "./routes/password.routes";
+import exchangeRateRoutes from "./routes/exchange-rate.routes";
 
 
 const app = express();
@@ -22,6 +23,11 @@ app.use(
     }),
 );
 app.use(express.json());
+// exchange
+app.use(
+    "/api/exchange-rates",
+    exchangeRateRoutes,
+);
 //get report
 app.use(
     "/api/reports",

@@ -13,6 +13,11 @@ import {
 } from "../services/exchange-rate.service";
 
 
+/*
+ * POST /api/exchange-rates
+ *
+ * FINANCE only
+ */
 export async function createExchangeRateController(
     req: Request,
     res: Response,
@@ -25,10 +30,14 @@ export async function createExchangeRateController(
         return;
     }
 
-    if (req.user.role !== "FINANCE" &&
-        req.user.role !== "COMPANY_ADMIN") {
+    /*
+     * Only FINANCE can create
+     * exchange rates.
+     */
+    if (req.user.role !== "FINANCE") {
         res.status(403).json({
-            message: "Forbidden",
+            message:
+                "Only Finance can create exchange rates",
         });
         return;
     }
@@ -70,12 +79,22 @@ export async function createExchangeRateController(
         }
 
         res.status(500).json({
-            message: "Failed to create exchange rate",
+            message:
+                "Failed to create exchange rate",
         });
     }
 }
 
 
+/*
+ * GET /api/exchange-rates
+ *
+ * All authenticated users can view.
+ *
+ * FINANCE
+ * COMPANY_ADMIN
+ * AGENT
+ */
 export async function getExchangeRatesController(
     req: Request,
     res: Response,
@@ -98,7 +117,8 @@ export async function getExchangeRatesController(
     } catch {
 
         res.status(500).json({
-            message: "Failed to get exchange rates",
+            message:
+                "Failed to get exchange rates",
         });
     }
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import SidebarAdmin from "../../component/layout/sidebar-admin";
@@ -6,10 +6,28 @@ import api from "../../services/api";
 import Button from "../../component/ui/Button";
 import Input from "../../component/ui/input";
 
+import { useAuth } from "../../context/AuthContext";
+import { useAuthorizationCheck } from "../../authorization/AuthorizationCheck";
+
 
 function Settings() {
 
     const navigate = useNavigate();
+
+    const { isLoading } = useAuth();
+
+    const { adminAuthorization } =
+        useAuthorizationCheck();
+
+
+    useEffect(() => {
+
+        if (!isLoading) {
+            adminAuthorization();
+        }
+
+    }, [isLoading, adminAuthorization]);
+
 
     const [currentPassword, setCurrentPassword] =
         useState("");
@@ -40,10 +58,6 @@ function Settings() {
         setSuccess("");
 
 
-        /*
-         * Check passwords before sending
-         * the request to the backend.
-         */
         if (newPassword !== confirmPassword) {
 
             setError(
@@ -83,32 +97,60 @@ function Settings() {
             );
 
 
-            /*
-             * Clear the password fields.
-             */
             setCurrentPassword("");
             setNewPassword("");
             setConfirmPassword("");
 
 
-        } catch (err: any) {
+        } catch (err: unknown) {
 
             console.error(
                 "Change password error:",
                 err,
             );
 
+            if (
+                typeof err === "object" &&
+                err !== null &&
+                "response" in err
+            ) {
+                const response = (
+                    err as {
+                        response?: {
+                            data?: {
+                                error?: {
+                                    message?: string;
+                                };
+                            };
+                        };
+                    }
+                ).response;
 
-            setError(
-                err?.response?.data?.error?.message ||
-                "Failed to change password.",
-            );
+                setError(
+                    response?.data?.error?.message ||
+                    "Failed to change password.",
+                );
+            } else {
+
+                setError(
+                    "Failed to change password.",
+                );
+            }
 
         } finally {
 
             setLoading(false);
 
         }
+    }
+
+
+    if (isLoading) {
+        return (
+            <div className="flex min-h-screen items-center justify-center">
+                Loading...
+            </div>
+        );
     }
 
 
@@ -119,8 +161,6 @@ function Settings() {
 
 
             <main className="flex-1 p-8">
-
-                {/* Header */}
 
                 <div className="mb-8">
 
@@ -134,8 +174,6 @@ function Settings() {
 
                 </div>
 
-
-                {/* Change Password */}
 
                 <div className="max-w-2xl rounded-xl border border-gray-200 bg-white p-6">
 
@@ -183,8 +221,6 @@ function Settings() {
                         className="space-y-5"
                     >
 
-                        {/* Current Password */}
-
                         <div>
 
                             <label
@@ -211,8 +247,6 @@ function Settings() {
 
                         </div>
 
-
-                        {/* New Password */}
 
                         <div>
 
@@ -246,8 +280,6 @@ function Settings() {
                         </div>
 
 
-                        {/* Confirm Password */}
-
                         <div>
 
                             <label
@@ -276,8 +308,6 @@ function Settings() {
                         </div>
 
 
-                        {/* Actions */}
-
                         <div className="flex items-center gap-3 pt-2">
 
                             <Button
@@ -296,7 +326,6 @@ function Settings() {
                                 onClick={() =>
                                     navigate("/admin/dashboard")
                                 }
-                            
                             >
                                 Cancel
                             </button>
@@ -315,4 +344,3 @@ function Settings() {
 
 
 export default Settings;
-

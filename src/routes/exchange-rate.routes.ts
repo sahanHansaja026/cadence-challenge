@@ -1,6 +1,12 @@
+import { Router } from "express";
+
 import {
-    Router,
-} from "express";
+    authenticate,
+} from "../middleware/auth.middleware";
+
+import {
+    requireRole,
+} from "../middleware/role.middleware";
 
 import {
     createExchangeRateController,
@@ -9,14 +15,25 @@ import {
 
 const router = Router();
 
-router.post(
-    "/",
-    createExchangeRateController,
-);
-
+/*
+ * All authenticated users can view
+ * exchange rates.
+ */
 router.get(
     "/",
+    authenticate,
     getExchangeRatesController,
+);
+
+/*
+ * Only Finance can create
+ * exchange rates.
+ */
+router.post(
+    "/",
+    authenticate,
+    requireRole("FINANCE"),
+    createExchangeRateController,
 );
 
 export default router;

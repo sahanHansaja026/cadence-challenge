@@ -27,6 +27,10 @@ const menuItems = [
         path: "/refundfinace",
     },
     {
+        label: "Exchage rate",
+        path: "/exchagerateinsert",
+    },
+    {
         label: "Financial Reports",
         path: "/finance/reports",
     },

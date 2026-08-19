@@ -3,6 +3,7 @@ export interface BookingCsvRow {
     agent_code?: string;
     date?: string;
     amount?: string;
+    currency?: string;
     product_code?: string;
 }
 
@@ -12,6 +13,7 @@ export interface BookingValidationResult {
     reason?: string;
     bookingDate?: string;
     amount?: string;
+    currency?: string;
     productCode?: string;
 }
 
@@ -148,6 +150,32 @@ export function isValidAmount(
 
 
 /*
+ * Validate currency.
+ *
+ * Currency must be a three-letter
+ * ISO-style currency code.
+ *
+ * Examples:
+ *
+ * LKR
+ * USD
+ * EUR
+ */
+export function isValidCurrency(
+    value: string,
+): boolean {
+
+    const currency =
+        value.trim().toUpperCase();
+
+
+    return /^[A-Z]{3}$/.test(
+        currency,
+    );
+}
+
+
+/*
  * Products currently supported
  * by Cadence.
  */
@@ -169,8 +197,12 @@ const allowedProducts =
  * - agent exists
  * - agent belongs to company
  * - duplicate booking
+ * - exchange rate exists
  *
  * remain inside importBookings().
+ *
+ * Exchange-rate conversion also happens
+ * inside importBookings().
  */
 export function validateBookingRow(
     row: BookingCsvRow,
@@ -194,6 +226,12 @@ export function validateBookingRow(
     const amount =
         row.amount
             ?.trim() ?? "";
+
+
+    const currency =
+        row.currency
+            ?.trim()
+            .toUpperCase() ?? "";
 
 
     const productCode =
@@ -279,6 +317,29 @@ export function validateBookingRow(
 
 
     /*
+     * Validate currency.
+     */
+    if (!currency) {
+
+        return {
+            valid: false,
+            reason:
+                "Currency is required.",
+        };
+    }
+
+
+    if (!isValidCurrency(currency)) {
+
+        return {
+            valid: false,
+            reason:
+                "Currency must be a valid 3-letter currency code.",
+        };
+    }
+
+
+    /*
      * Validate product.
      */
     if (!productCode) {
@@ -307,6 +368,23 @@ export function validateBookingRow(
 
     /*
      * All CSV validation passed.
+     *
+     * Example:
+     *
+     * amount = 100
+     * currency = USD
+     *
+     * The validator only returns the
+     * original values.
+     *
+     * The import service will later:
+     *
+     * 1. Find the exchange rate.
+     * 2. Convert USD -> LKR.
+     * 3. Store original amount.
+     * 4. Store currency.
+     * 5. Store exchange rate.
+     * 6. Store LKR amount.
      */
     return {
         valid: true,
@@ -315,6 +393,9 @@ export function validateBookingRow(
 
         amount,
 
+        currency,
+
         productCode,
     };
 }
+

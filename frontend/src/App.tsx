@@ -26,6 +26,7 @@ import AgentPayouts from "./pages/agent/payouts";
 import Report from "./pages/admin/report";
 import AgentReports from "./pages/agent/statement";
 import Settings from "./pages/admin/Settings";
+import ExchangeRates from "./pages/finace/ExchangeRates";
 
 
 function App() {
@@ -58,7 +59,8 @@ function App() {
         <Route path="/mypayout" element={<AgentPayouts />} />
         <Route path="/reportadmin" element={<Report />} />
         <Route path="/reportagent" element={<AgentReports />} />
-        <Route path="/settings" element={<Settings/>} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="/exchagerateinsert" element={<ExchangeRates />} />
       </Routes>
 
 
