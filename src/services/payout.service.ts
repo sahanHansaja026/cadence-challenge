@@ -614,3 +614,86 @@ export async function getPayoutLineItems(
         ],
     );
 }
+
+/*
+ * GET PAYOUTS FOR AUTHENTICATED AGENT
+ *
+ * The agent is identified using:
+ *
+ * req.user.userId
+ *        ↓
+ * agents.user_id
+ *        ↓
+ * agents.agent_code
+ *        ↓
+ * payout_line_items.agent_code
+ *
+ * The company_id is also checked for tenant isolation.
+ */
+export async function getAgentPayouts(
+    companyId: string,
+    userId: string,
+): Promise<
+    Array<{
+        payout_run_id: string;
+        run_no: number;
+        period_start: string;
+        period_end: string;
+        status: "DRAFT" | "FINALISED";
+        agent_code: string;
+        booking_count: number;
+        gross_volume: string;
+        commission_rate: string;
+        commission_amount: string;
+    }>
+> {
+
+    return await query<{
+        payout_run_id: string;
+        run_no: number;
+        period_start: string;
+        period_end: string;
+        status: "DRAFT" | "FINALISED";
+        agent_code: string;
+        booking_count: number;
+        gross_volume: string;
+        commission_rate: string;
+        commission_amount: string;
+    }>(
+        `
+        SELECT
+            pr.id AS payout_run_id,
+            pr.run_no,
+            pr.period_start,
+            pr.period_end,
+            pr.status,
+
+            pli.agent_code,
+            pli.booking_count,
+            pli.gross_volume,
+            pli.commission_rate,
+            pli.commission_amount
+
+        FROM agents a
+
+        INNER JOIN payout_line_items pli
+            ON pli.agent_code = a.agent_code
+
+        INNER JOIN payout_runs pr
+            ON pr.id = pli.payout_run_id
+
+        WHERE a.user_id = $1
+
+          AND a.company_id = $2
+
+          AND pr.company_id = $2
+
+        ORDER BY
+            pr.created_at DESC
+        `,
+        [
+            userId,
+            companyId,
+        ],
+    );
+}

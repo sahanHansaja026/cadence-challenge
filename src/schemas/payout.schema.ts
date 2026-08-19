@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+
 const isoDate = z
     .string()
     .regex(
@@ -13,29 +14,36 @@ const isoDate = z
             );
 
             return (
-                !Number.isNaN(date.getTime()) &&
-                date.toISOString().slice(0, 10) === value
+                !Number.isNaN(
+                    date.getTime(),
+                ) &&
+                date.toISOString()
+                    .slice(0, 10) === value
             );
         },
         "Invalid calendar date",
     );
 
 
-export const createPayoutRunSchema = z
-    .object({
-        periodStart: isoDate,
+export const createPayoutRunSchema =
+    z
+        .object({
+            periodStart: isoDate,
 
-        periodEnd: isoDate,
-    })
-    .refine(
-        (data) =>
-            data.periodStart <= data.periodEnd,
-        {
-            message:
-                "Period end must be on or after period start.",
-            path: ["periodEnd"],
-        },
-    );
+            periodEnd: isoDate,
+        })
+        .refine(
+            (data) =>
+                data.periodStart <=
+                data.periodEnd,
+            {
+                message:
+                    "Period end must be on or after period start.",
+                path: [
+                    "periodEnd",
+                ],
+            },
+        );
 
 
 export type CreatePayoutRunInput =
