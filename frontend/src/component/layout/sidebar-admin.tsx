@@ -100,7 +100,7 @@ const SidebarAdmin: React.FC<SidebarProps> = ({
                 <button
                     type="button"
                     onClick={() =>
-                        handleNavigation("Settings")
+                        navigate("/settings")
                     }
                     className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                 >

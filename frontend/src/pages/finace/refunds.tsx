@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useAuthorizationCheck } from "../../authorization/AuthorizationCheck";
-import SidebarAdmin from "../../component/layout/sidebar-admin";
 import SidebarFinance from "../../component/layout/sidebar-finace";
 import api from "../../services/api";
 

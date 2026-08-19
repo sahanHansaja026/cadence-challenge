@@ -1,7 +1,5 @@
 import { randomUUID } from "crypto";
-
 import { query } from "../db/client";
-
 
 interface PayoutRun {
     id: string;
@@ -14,7 +12,6 @@ interface PayoutRun {
     created_at: string;
 }
 
-
 interface PayoutLineItem {
     id: string;
     payout_run_id: string;
@@ -25,16 +22,249 @@ interface PayoutLineItem {
     commission_amount: string;
 }
 
+interface BookingGroup {
+    agent_code: string;
+    product_code: string;
+    booking_date: string;
+    booking_count: number;
+    gross_volume: string;
+}
+
+interface CommissionRule {
+    id: string;
+    rule_type: "TIERED" | "PRODUCT_OVERRIDE";
+    commission_rate: string;
+    product_code: string | null;
+    min_amount: string;
+    max_amount: string | null;
+}
+
+/*
+ * Calculate commission using tiered rules.
+ *
+ * Example:
+ *
+ * 0 - 100,000       = 6%
+ * 100,000.01+       = 3%
+ *
+ * 150,000 total:
+ *
+ * 100,000 × 6% = 6,000
+ *  50,000 × 3% = 1,500
+ *
+ * Total = 7,500
+ */
+function calculateTieredCommission(
+    amount: number,
+    rules: CommissionRule[],
+): number {
+
+    if (amount <= 0 || rules.length === 0) {
+        return 0;
+    }
+
+    /*
+     * Sort rules from lowest tier to highest.
+     */
+    const sortedRules = [...rules].sort(
+        (a, b) =>
+            Number(a.min_amount) -
+            Number(b.min_amount),
+    );
+
+    let remainingAmount = amount;
+    let commission = 0;
+
+    for (const rule of sortedRules) {
+
+        if (remainingAmount <= 0) {
+            break;
+        }
+
+        const minAmount =
+            Number(rule.min_amount);
+
+        const maxAmount =
+            rule.max_amount === null
+                ? Infinity
+                : Number(rule.max_amount);
+
+        /*
+         * Amount available inside this tier.
+         */
+        const tierSize =
+            maxAmount === Infinity
+                ? Infinity
+                : maxAmount - minAmount;
+
+        /*
+         * Skip a tier that starts above
+         * the amount being calculated.
+         */
+        if (amount <= minAmount) {
+            continue;
+        }
+
+        /*
+         * Calculate how much belongs
+         * to this tier.
+         */
+        const amountAlreadyCovered =
+            Math.max(
+                0,
+                minAmount,
+            );
+
+        const availableForTier =
+            Math.min(
+                remainingAmount,
+                Math.max(
+                    0,
+                    amount - amountAlreadyCovered,
+                ),
+                tierSize,
+            );
+
+        if (availableForTier <= 0) {
+            continue;
+        }
+
+        const rate =
+            Number(rule.commission_rate);
+
+        commission +=
+            availableForTier *
+            rate /
+            100;
+
+        remainingAmount -=
+            availableForTier;
+    }
+
+    return Number(
+        commission.toFixed(2),
+    );
+}
+
+/*
+ * Find applicable PRODUCT_OVERRIDE rule.
+ *
+ * Product override has priority over
+ * generic tiered rules.
+ */
+async function getProductOverrideRule(
+    companyId: string,
+    productCode: string,
+    bookingDate: string,
+): Promise<CommissionRule | null> {
+
+    const rules =
+        await query<CommissionRule>(
+            `
+            SELECT
+                id,
+                rule_type,
+                commission_rate,
+                product_code,
+                min_amount,
+                max_amount
+
+            FROM commission_rules
+
+            WHERE company_id = $1
+
+              AND rule_type = 'PRODUCT_OVERRIDE'
+
+              AND product_code = $2
+
+              AND effective_from <= $3::date
+
+              AND (
+                    effective_to IS NULL
+                    OR effective_to >= $3::date
+              )
+
+            ORDER BY
+                effective_from DESC
+
+            LIMIT 1
+            `,
+            [
+                companyId,
+                productCode,
+                bookingDate,
+            ],
+        );
+
+    return rules[0] ?? null;
+}
+
+/*
+ * Get all TIERED rules applicable
+ * on a particular booking date.
+ */
+async function getTieredRules(
+    companyId: string,
+    bookingDate: string,
+): Promise<CommissionRule[]> {
+
+    return await query<CommissionRule>(
+        `
+        SELECT
+            id,
+            rule_type,
+            commission_rate,
+            product_code,
+            min_amount,
+            max_amount
+
+        FROM commission_rules
+
+        WHERE company_id = $1
+
+          AND rule_type = 'TIERED'
+
+          AND product_code IS NULL
+
+          AND effective_from <= $2::date
+
+          AND (
+                effective_to IS NULL
+                OR effective_to >= $2::date
+          )
+
+        ORDER BY
+            min_amount ASC
+        `,
+        [
+            companyId,
+            bookingDate,
+        ],
+    );
+}
 
 /*
  * CREATE PAYOUT RUN
  *
- * 1. Create payout run
- * 2. Find active bookings in the period
- * 3. Find matching commission rules
- * 4. Calculate commission
- * 5. Create payout line items
- * 6. Update total payout amount
+ * Rules:
+ *
+ * 1. Product override has priority.
+ *
+ * 2. Otherwise TIERED rules are used.
+ *
+ * 3. Tiered commission is calculated progressively.
+ *
+ * Example:
+ *
+ * 0 - 100,000       6%
+ * 100,000 - 200,000 3%
+ *
+ * 150,000:
+ *
+ * 100,000 × 6% = 6,000
+ * 50,000 × 3%  = 1,500
+ *
+ * Total = 7,500
  */
 export async function createPayoutRun(
     companyId: string,
@@ -51,7 +281,6 @@ export async function createPayoutRun(
         );
     }
 
-
     /*
      * Get next run number.
      */
@@ -65,7 +294,9 @@ export async function createPayoutRun(
                     MAX(run_no),
                     0
                 ) + 1 AS next_run_no
+
             FROM payout_runs
+
             WHERE company_id = $1
             `,
             [
@@ -73,23 +304,17 @@ export async function createPayoutRun(
             ],
         );
 
-
     const runNo =
         Number(
             runNumberResult[0]?.next_run_no ?? 1,
         );
 
-
     /*
-     * Generate payout run ID.
+     * Create payout run.
      */
     const payoutRunId =
         `run_${randomUUID()}`;
 
-
-    /*
-     * Create payout run.
-     */
     const payoutRuns =
         await query<PayoutRun>(
             `
@@ -102,6 +327,7 @@ export async function createPayoutRun(
                 status,
                 total_amount
             )
+
             VALUES (
                 $1,
                 $2,
@@ -111,6 +337,7 @@ export async function createPayoutRun(
                 'DRAFT',
                 0
             )
+
             RETURNING
                 id,
                 company_id,
@@ -130,10 +357,8 @@ export async function createPayoutRun(
             ],
         );
 
-
     const payoutRun =
         payoutRuns[0];
-
 
     if (!payoutRun) {
         throw new Error(
@@ -141,22 +366,19 @@ export async function createPayoutRun(
         );
     }
 
-
     /*
-     * Get active bookings
-     * inside payout period.
+     * Get active bookings.
+     *
+     * We keep booking_date because
+     * commission rules are effective-dated.
      */
     const bookings =
-        await query<{
-            agent_code: string;
-            product_code: string;
-            booking_count: number;
-            gross_volume: string;
-        }>(
+        await query<BookingGroup>(
             `
             SELECT
                 agent_code,
                 product_code,
+                booking_date,
 
                 COUNT(*)::integer
                     AS booking_count,
@@ -179,10 +401,13 @@ export async function createPayoutRun(
 
             GROUP BY
                 agent_code,
-                product_code
+                product_code,
+                booking_date
 
             ORDER BY
-                agent_code
+                agent_code,
+                booking_date,
+                product_code
             `,
             [
                 companyId,
@@ -191,195 +416,312 @@ export async function createPayoutRun(
             ],
         );
 
-
     /*
      * No bookings.
-     *
-     * The payout run is still valid.
-     * Its total remains 0.
      */
     if (bookings.length === 0) {
         return payoutRun;
     }
 
+    /*
+     * Group bookings by agent.
+     */
+    const agentGroups =
+        new Map<
+            string,
+            BookingGroup[]
+        >();
+
+    for (const booking of bookings) {
+
+        const existing =
+            agentGroups.get(
+                booking.agent_code,
+            );
+
+        if (existing) {
+            existing.push(booking);
+        } else {
+            agentGroups.set(
+                booking.agent_code,
+                [booking],
+            );
+        }
+    }
 
     let totalCommission = 0;
 
-
     /*
-     * Process every
-     * agent/product group.
+     * Process each agent.
      */
-    for (const booking of bookings) {
-
-        const grossVolume =
-            Number(
-                booking.gross_volume,
-            );
-
-
-        /*
-         * Find matching commission rule.
-         *
-         * Product-specific rule has priority.
-         *
-         * Generic rule:
-         * product_code IS NULL
-         */
-        const rules =
-            await query<{
-                id: string;
-                commission_rate: string;
-            }>(
-                `
-                SELECT
-                    id,
-                    commission_rate
-
-                FROM commission_rules
-
-                WHERE company_id = $1
-
-                  AND effective_from <= $2::date
-
-                  AND (
-                        effective_to IS NULL
-                        OR effective_to >= $3::date
-                  )
-
-                  AND min_amount <= $4::numeric
-
-                  AND (
-                        max_amount IS NULL
-                        OR max_amount >= $4::numeric
-                  )
-
-                  AND (
-                        product_code = $5
-                        OR product_code IS NULL
-                  )
-
-                ORDER BY
-
-                    CASE
-                        WHEN product_code = $5
-                        THEN 0
-                        ELSE 1
-                    END,
-
-                    CASE
-                        WHEN max_amount IS NULL
-                        THEN 999999999999
-                        ELSE max_amount
-                    END
-
-                LIMIT 1
-                `,
-                [
-                    companyId,
-                    periodStart,
-                    periodEnd,
-                    grossVolume,
-                    booking.product_code,
-                ],
-            );
-
+    for (
+        const [
+            agentCode,
+            agentBookings,
+        ]
+        of agentGroups
+    ) {
 
         /*
-         * No matching commission rule.
-         *
-         * Skip this booking group.
+         * Total booking volume
+         * for this agent.
          */
-        const matchingRule =
-            rules[0];
-
-
-        if (!matchingRule) {
-            continue;
-        }
-
-
-        /*
-         * Commission percentage.
-         */
-        const commissionRate =
-            Number(
-                matchingRule.commission_rate,
+        const totalAgentVolume =
+            agentBookings.reduce(
+                (
+                    total,
+                    booking,
+                ) =>
+                    total +
+                    Number(
+                        booking.gross_volume,
+                    ),
+                0,
             );
 
+        /*
+         * Total booking count.
+         */
+        const totalBookingCount =
+            agentBookings.reduce(
+                (
+                    total,
+                    booking,
+                ) =>
+                    total +
+                    Number(
+                        booking.booking_count,
+                    ),
+                0,
+            );
 
         /*
          * Calculate commission.
+         */
+        let agentCommission = 0;
+
+        /*
+         * Check whether any
+         * product override applies.
+         *
+         * Product override is calculated
+         * separately for the relevant product.
+         */
+        const processedOverrideBookings =
+            new Set<string>();
+
+        for (const booking of agentBookings) {
+
+            const productOverride =
+                await getProductOverrideRule(
+                    companyId,
+                    booking.product_code,
+                    booking.booking_date,
+                );
+
+            if (!productOverride) {
+                continue;
+            }
+
+            const bookingVolume =
+                Number(
+                    booking.gross_volume,
+                );
+
+            /*
+             * Product override rate.
+             */
+            const rate =
+                Number(
+                    productOverride.commission_rate,
+                );
+
+            const commission =
+                Number(
+                    (
+                        bookingVolume *
+                        rate /
+                        100
+                    ).toFixed(2),
+                );
+
+            agentCommission +=
+                commission;
+
+            processedOverrideBookings.add(
+                `${booking.booking_date}_${booking.product_code}`,
+            );
+        }
+
+        /*
+         * Calculate normal TIERED commission
+         * for bookings that do not have a
+         * product override.
+         *
+         * Use the rules effective on the
+         * booking date.
+         */
+        const normalBookings =
+            agentBookings.filter(
+                booking =>
+                    !processedOverrideBookings.has(
+                        `${booking.booking_date}_${booking.product_code}`,
+                    ),
+            );
+
+        /*
+         * Group normal bookings by
+         * effective booking date.
+         *
+         * This prevents a rule from one
+         * date being incorrectly applied
+         * to another date.
+         */
+        const bookingsByDate =
+            new Map<
+                string,
+                BookingGroup[]
+            >();
+
+        for (
+            const booking
+            of normalBookings
+        ) {
+
+            const existing =
+                bookingsByDate.get(
+                    booking.booking_date,
+                );
+
+            if (existing) {
+                existing.push(booking);
+            } else {
+                bookingsByDate.set(
+                    booking.booking_date,
+                    [booking],
+                );
+            }
+        }
+
+        /*
+         * Calculate tiered commission
+         * for each effective-date group.
+         */
+        for (
+            const [
+                bookingDate,
+                dateBookings,
+            ]
+            of bookingsByDate
+        ) {
+
+            const dateVolume =
+                dateBookings.reduce(
+                    (
+                        total,
+                        booking,
+                    ) =>
+                        total +
+                        Number(
+                            booking.gross_volume,
+                        ),
+                    0,
+                );
+
+            const tieredRules =
+                await getTieredRules(
+                    companyId,
+                    bookingDate,
+                );
+
+            if (tieredRules.length === 0) {
+                continue;
+            }
+
+            /*
+             * Progressive tier calculation.
+             */
+            agentCommission +=
+                calculateTieredCommission(
+                    dateVolume,
+                    tieredRules,
+                );
+        }
+
+        /*
+         * Round final agent commission.
+         */
+        agentCommission =
+            Number(
+                agentCommission.toFixed(2),
+            );
+
+        /*
+         * Do not create a payout line
+         * when commission is zero.
+         */
+        if (agentCommission <= 0) {
+            continue;
+        }
+
+        totalCommission +=
+            agentCommission;
+
+        /*
+         * Calculate effective commission rate.
+         *
+         * This is useful because a single
+         * payout line can contain multiple
+         * tiers.
          *
          * Example:
          *
-         * Gross volume = 100000
-         * Rate = 5
+         * volume = 150,000
+         * commission = 7,500
          *
-         * Commission =
-         * 100000 * 5 / 100
-         *
-         * = 5000
+         * effective rate = 5%
          */
-        const commissionAmount =
-            Number(
-                (
-                    grossVolume *
-                    commissionRate /
-                    100
-                ).toFixed(2),
-            );
-
-
-        totalCommission +=
-            commissionAmount;
-
+        const effectiveRate =
+            totalAgentVolume > 0
+                ? Number(
+                    (
+                        agentCommission /
+                        totalAgentVolume *
+                        100
+                    ).toFixed(5),
+                )
+                : 0;
 
         /*
-         * Check whether this agent
-         * already has a payout line.
+         * Check existing payout line.
          */
         const existingLine =
             await query<{
                 id: string;
-                booking_count: number;
-                gross_volume: string;
-                commission_amount: string;
             }>(
                 `
                 SELECT
-                    id,
-                    booking_count,
-                    gross_volume,
-                    commission_amount
+                    id
 
                 FROM payout_line_items
 
                 WHERE payout_run_id = $1
+
                   AND agent_code = $2
 
                 LIMIT 1
                 `,
                 [
                     payoutRunId,
-                    booking.agent_code,
+                    agentCode,
                 ],
             );
 
-
-        /*
-         * Get existing line safely.
-         *
-         * This avoids:
-         *
-         * Object is possibly 'undefined'
-         */
         const currentLine =
-            existingLine[0];
-
+            existingLine?.[0];
 
         /*
-         * Existing agent line.
+         * Existing line.
          */
         if (currentLine) {
 
@@ -389,23 +731,24 @@ export async function createPayoutRun(
 
                 SET
                     booking_count =
-                        booking_count + $1,
+                        $1,
 
                     gross_volume =
-                        gross_volume + $2,
+                        $2,
 
                     commission_amount =
-                        commission_amount + $3,
+                        $3,
 
-                    commission_rate = $4
+                    commission_rate =
+                        $4
 
                 WHERE id = $5
                 `,
                 [
-                    booking.booking_count,
-                    grossVolume,
-                    commissionAmount,
-                    commissionRate,
+                    totalBookingCount,
+                    totalAgentVolume,
+                    agentCommission,
+                    effectiveRate,
                     currentLine.id,
                 ],
             );
@@ -413,13 +756,12 @@ export async function createPayoutRun(
         }
 
         /*
-         * First line for this agent.
+         * New line.
          */
         else {
 
             const lineId =
                 `payout_line_${randomUUID()}`;
-
 
             await query(
                 `
@@ -446,16 +788,15 @@ export async function createPayoutRun(
                 [
                     lineId,
                     payoutRunId,
-                    booking.agent_code,
-                    booking.booking_count,
-                    grossVolume,
-                    commissionRate,
-                    commissionAmount,
+                    agentCode,
+                    totalBookingCount,
+                    totalAgentVolume,
+                    effectiveRate,
+                    agentCommission,
                 ],
             );
         }
     }
-
 
     /*
      * Update payout total.
@@ -469,6 +810,7 @@ export async function createPayoutRun(
                 total_amount = $1
 
             WHERE id = $2
+
               AND company_id = $3
 
             RETURNING
@@ -488,17 +830,14 @@ export async function createPayoutRun(
             ],
         );
 
-
     const updatedRun =
         updatedRuns[0];
-
 
     if (!updatedRun) {
         throw new Error(
             "PAYOUT_RUN_UPDATE_FAILED",
         );
     }
-
 
     return updatedRun;
 }
@@ -561,6 +900,7 @@ export async function getPayoutRunById(
             FROM payout_runs
 
             WHERE id = $1
+
               AND company_id = $2
 
             LIMIT 1
@@ -571,15 +911,12 @@ export async function getPayoutRunById(
             ],
         );
 
-
     return result[0] ?? null;
 }
 
 
 /*
  * GET PAYOUT LINE ITEMS
- *
- * Used by the payout details/view page.
  */
 export async function getPayoutLineItems(
     payoutRunId: string,
@@ -603,6 +940,7 @@ export async function getPayoutLineItems(
             ON pr.id = pli.payout_run_id
 
         WHERE pli.payout_run_id = $1
+
           AND pr.company_id = $2
 
         ORDER BY
@@ -615,20 +953,9 @@ export async function getPayoutLineItems(
     );
 }
 
+
 /*
  * GET PAYOUTS FOR AUTHENTICATED AGENT
- *
- * The agent is identified using:
- *
- * req.user.userId
- *        ↓
- * agents.user_id
- *        ↓
- * agents.agent_code
- *        ↓
- * payout_line_items.agent_code
- *
- * The company_id is also checked for tenant isolation.
  */
 export async function getAgentPayouts(
     companyId: string,

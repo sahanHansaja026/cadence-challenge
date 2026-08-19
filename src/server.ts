@@ -12,6 +12,7 @@ import bookingManagementRoutes from "./routes/booking-management.routes";
 import commissionRuleRoutes from "./routes/commissionRule.routes";
 import refundRoutes from "./routes/refund.routes";
 import reportRoutes from "./routes/report.routes";
+import passwordRoutes from "./routes/password.routes";
 
 const app = express();
 app.use(
@@ -53,7 +54,11 @@ app.use(
     "/api/bookings",
     bookingManagementRoutes,
 );
-
+// password change
+app.use(
+    "/api/password",
+    passwordRoutes,
+);
 // agent assing
 app.use(
     "/api/agents",
@@ -96,7 +101,7 @@ app.listen(
     port,
     () => {
         console.log(
-            `Cadence API running on port ${port}`,
+            `Server API running on port ${port}`,
         );
     },
 );

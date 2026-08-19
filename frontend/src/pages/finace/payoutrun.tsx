@@ -13,7 +13,6 @@ import {
 
 import Input from "../../component/ui/input";
 import Button from "../../component/ui/Button";
-import SidebarAdmin from "../../component/layout/sidebar-admin";
 import api from "../../services/api";
 import SidebarFinance from "../../component/layout/sidebar-finace";
 
