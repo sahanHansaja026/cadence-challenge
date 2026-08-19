@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useAuthorizationCheck } from "../../authorization/AuthorizationCheck";
-import SidebarAdmin from "../../component/layout/sidebar-admin";
 import Button from "../../component/ui/Button";
 import api from "../../services/api";
+import SidebarFinance from "../../component/layout/sidebar-finace";
 
 interface ImportError {
     row: number;
@@ -22,14 +22,14 @@ interface ImportResult {
     rejections: ImportError[];
 }
 
-function Booking_infomation() {
+function Booking_Import_finace() {
     const {
         user,
         isLoading,
     } = useAuth();
 
     const {
-        adminAuthorization,
+        financeAuthorization,
     } = useAuthorizationCheck();
 
     const [file, setFile] =
@@ -46,7 +46,7 @@ function Booking_infomation() {
 
     useEffect(() => {
         if (!isLoading) {
-            adminAuthorization();
+            financeAuthorization();
         }
     }, [isLoading]);
 
@@ -81,34 +81,28 @@ function Booking_infomation() {
 
             formData.append("file", file);
 
-            const token = localStorage.getItem("token");
-
-            if (!token) {
-                setError("You are not authenticated.");
-                return;
-            }
+            const token =
+                localStorage.getItem("token");
 
             const response = await api.post(
                 "/bookings/import",
                 formData,
                 {
                     headers: {
-                        Authorization: `Bearer ${token}`,
+                        Authorization:
+                            `Bearer ${ token } `,
                     },
                 },
             );
 
-            setResult(response.data.data);
+            setResult(
+                response.data.data,
+            );
 
         } catch (error: any) {
             console.error(
                 "Booking import error:",
                 error,
-            );
-
-            console.error(
-                "Backend response:",
-                error?.response?.data,
             );
 
             setError(
@@ -139,7 +133,7 @@ function Booking_infomation() {
     return (
         <div className="flex min-h-screen bg-gray-50">
 
-            <SidebarAdmin
+            <SidebarFinance
                 activeItem="Booking Imports"
             />
 
@@ -416,5 +410,5 @@ function Booking_infomation() {
     );
 }
 
-export default Booking_infomation;
+export default Booking_Import_finace;
 

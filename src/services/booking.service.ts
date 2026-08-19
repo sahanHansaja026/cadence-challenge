@@ -1,15 +1,21 @@
 import { randomUUID } from "crypto";
 
 import { query } from "../db/client";
-import { BookingImportRow } from "../controllers/booking.controller";
-import { CsvBookingRow } from "../schemas/booking.schema";
 
+import type {
+    BookingImportRow,
+} from "../controllers/booking.controller";
+
+import {
+    validateBookingRow,
+} from "../validators/booking-import.validator";
 
 
 interface ImportError {
     row: number;
     reason: string;
 }
+
 
 export interface ImportResult {
     accepted: number;
@@ -18,133 +24,20 @@ export interface ImportResult {
     errors: ImportError[];
 }
 
-/*
- * Convert DD/MM/YYYY or D/M/YYYY
- * into PostgreSQL YYYY-MM-DD.
- */
-
-function convertDate(
-    value: string,
-): string | null {
-
-    const match =
-        /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(
-            value.trim(),
-        );
-
-    if (!match) {
-        return null;
-    }
-
-    const day =
-        Number(match[1]);
-
-    const month =
-        Number(match[2]);
-
-    const year =
-        Number(match[3]);
-
-    /*
-     * Basic range validation.
-     */
-
-    if (
-        month < 1 ||
-        month > 12 ||
-        day < 1 ||
-        day > 31
-    ) {
-        return null;
-    }
-
-    /*
-     * JavaScript Date validation.
-     *
-     * This catches:
-     *
-     * 31/02/2026
-     * 31/04/2026
-     * etc.
-     */
-
-    const date =
-        new Date(
-            Date.UTC(
-                year,
-                month - 1,
-                day,
-            ),
-        );
-
-    if (
-        date.getUTCFullYear() !== year ||
-        date.getUTCMonth() !== month - 1 ||
-        date.getUTCDate() !== day
-    ) {
-        return null;
-    }
-
-    return [
-        String(year),
-
-        String(month)
-            .padStart(2, "0"),
-
-        String(day)
-            .padStart(2, "0"),
-    ].join("-");
-}
 
 /*
- * Amount validation.
+ * Import bookings from CSV rows.
  *
- * Valid:
+ * Responsibilities:
  *
- * 5000
- * 5000.5
- * 5000.50
+ * 1. Validate CSV values.
+ * 2. Verify that the agent exists and is active.
+ * 3. Check for duplicate bookings.
+ * 4. Insert valid bookings.
  *
- * Invalid:
- *
- * -500
- * 0
- * 5000.123
- * Rs. 5000
- * USD 500
- * 5,000
+ * companyId comes from the authenticated user's
+ * company and is NOT taken from the CSV.
  */
-
-function isValidAmount(
-    value: string,
-): boolean {
-
-    const amount =
-        value.trim();
-
-    if (
-        !/^\d+(\.\d{1,2})?$/.test(
-            amount,
-        )
-    ) {
-        return false;
-    }
-
-    return Number(amount) > 0;
-}
-
-/*
- * Products currently supported
- * by Cadence.
- */
-
-const allowedProducts =
-    new Set([
-        "TRAVEL",
-        "VISA",
-        "INSURANCE",
-    ]);
-
 export async function importBookings(
     companyId: string,
     rows: BookingImportRow[],
@@ -157,30 +50,79 @@ export async function importBookings(
         errors: [],
     };
 
-    /*
-     * Process each valid controller row.
-     */
 
+    /*
+     * Process each CSV row.
+     */
     for (const item of rows) {
 
         /*
-         * IMPORTANT:
-         *
-         * Use the ORIGINAL CSV row number.
-         *
-         * Do NOT use index + 2 here.
+         * Use the original CSV row number
+         * for error reporting.
          */
-
         const rowNumber =
             item.rowNumber;
 
-        const row: CsvBookingRow =
+        const row =
             item.data;
 
-        /*
-         * Normalize values.
-         */
 
+        /*
+         * -----------------------------------------------------
+         * CSV VALIDATION
+         * -----------------------------------------------------
+         *
+         * This validation is pure and does not access
+         * the database.
+         */
+        const validation =
+            validateBookingRow(row);
+
+
+        /*
+         * Reject invalid CSV rows.
+         */
+        if (!validation.valid) {
+
+            result.rejected++;
+
+            result.errors.push({
+                row: rowNumber,
+                reason:
+                    validation.reason!,
+            });
+
+            continue;
+        }
+
+
+        /*
+         * -----------------------------------------------------
+         * NORMALIZED VALUES
+         * -----------------------------------------------------
+         *
+         * The validator has already:
+         *
+         * - trimmed values
+         * - converted the date
+         * - validated the amount
+         * - normalized the product code
+         */
+        const bookingDate =
+            validation.bookingDate!;
+
+        const amount =
+            validation.amount!;
+
+        const productCode =
+            validation.productCode!;
+
+
+        /*
+         * These values have already been validated,
+         * but we still normalize them here for the
+         * database operation.
+         */
         const externalRef =
             row.external_ref
                 ?.trim() ?? "";
@@ -189,166 +131,19 @@ export async function importBookings(
             row.agent_code
                 ?.trim() ?? "";
 
-        const date =
-            row.date
-                ?.trim() ?? "";
-
-        const amount =
-            row.amount
-                ?.trim() ?? "";
-
-        const productCode =
-            row.product_code
-                ?.trim()
-                .toUpperCase() ?? "";
 
         /*
-         * Validate reference.
-         */
-
-        if (!externalRef) {
-
-            result.rejected++;
-
-            result.errors.push({
-                row: rowNumber,
-                reason:
-                    "Ref is required.",
-            });
-
-            continue;
-        }
-
-        /*
-         * Validate agent.
-         */
-
-        if (!agentCode) {
-
-            result.rejected++;
-
-            result.errors.push({
-                row: rowNumber,
-                reason:
-                    "Agent Code is required.",
-            });
-
-            continue;
-        }
-
-        /*
-         * Validate date.
-         */
-
-        if (!date) {
-
-            result.rejected++;
-
-            result.errors.push({
-                row: rowNumber,
-                reason:
-                    "Booking Date is required.",
-            });
-
-            continue;
-        }
-
-        const bookingDate =
-            convertDate(date);
-
-        if (!bookingDate) {
-
-            result.rejected++;
-
-            result.errors.push({
-                row: rowNumber,
-                reason:
-                    "Date must be a valid date in DD/MM/YYYY format.",
-            });
-
-            continue;
-        }
-
-        /*
-         * Validate amount.
-         */
-
-        if (!amount) {
-
-            result.rejected++;
-
-            result.errors.push({
-                row: rowNumber,
-                reason:
-                    "Amount is required.",
-            });
-
-            continue;
-        }
-
-        if (!isValidAmount(amount)) {
-
-            result.rejected++;
-
-            result.errors.push({
-                row: rowNumber,
-                reason:
-                    "Amount must be a positive number with maximum 2 decimal places.",
-            });
-
-            continue;
-        }
-
-        /*
-         * Validate product.
-         */
-
-        if (!productCode) {
-
-            result.rejected++;
-
-            result.errors.push({
-                row: rowNumber,
-                reason:
-                    "Product is required.",
-            });
-
-            continue;
-        }
-
-        if (
-            !allowedProducts.has(
-                productCode,
-            )
-        ) {
-
-            result.rejected++;
-
-            result.errors.push({
-                row: rowNumber,
-                reason:
-                    `Product '${productCode}' is not supported.`,
-            });
-
-            continue;
-        }
-
-        /*
-         * Check agent.
+         * -----------------------------------------------------
+         * AGENT CHECK
+         * -----------------------------------------------------
          *
-         * Agent must:
+         * The agent must:
          *
-         * 1. Belong to this company.
+         * 1. Belong to the authenticated user's company.
          * 2. Be ACTIVE.
          *
-         * Case-insensitive matching means:
-         *
-         * AG-002
-         * ag-002
-         *
-         * are treated as the same agent.
+         * Agent matching is case-insensitive.
          */
-
         const agent =
             await query<{
                 id: string;
@@ -368,6 +163,10 @@ export async function importBookings(
                 ],
             );
 
+
+        /*
+         * Agent does not exist or is inactive.
+         */
         if (agent.length === 0) {
 
             result.rejected++;
@@ -381,14 +180,16 @@ export async function importBookings(
             continue;
         }
 
+
         /*
-         * Check duplicate booking.
+         * -----------------------------------------------------
+         * DUPLICATE CHECK
+         * -----------------------------------------------------
          *
-         * Unique by:
+         * A booking reference is unique within a company.
          *
          * company_id + external_ref
          */
-
         const duplicate =
             await query<{
                 id: string;
@@ -406,6 +207,10 @@ export async function importBookings(
                 ],
             );
 
+
+        /*
+         * Booking already exists.
+         */
         if (duplicate.length > 0) {
 
             result.duplicates++;
@@ -419,10 +224,16 @@ export async function importBookings(
             continue;
         }
 
-        /*
-         * Insert booking.
-         */
 
+        /*
+         * -----------------------------------------------------
+         * INSERT BOOKING
+         * -----------------------------------------------------
+         *
+         * companyId is taken from the authenticated request.
+         *
+         * It is NOT taken from the CSV.
+         */
         await query(
             `
             INSERT INTO bookings (
@@ -463,8 +274,13 @@ export async function importBookings(
             ],
         );
 
+
+        /*
+         * Successfully inserted.
+         */
         result.accepted++;
     }
+
 
     return result;
 }
