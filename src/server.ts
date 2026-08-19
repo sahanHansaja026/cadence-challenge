@@ -12,8 +12,9 @@ import bookingManagementRoutes from "./routes/booking-management.routes";
 import commissionRuleRoutes from "./routes/commissionRule.routes";
 import refundRoutes from "./routes/refund.routes";
 import reportRoutes from "./routes/report.routes";
-import passwordRoutes from "./routes/password.routes";
+
 import exchangeRateRoutes from "./routes/exchange-rate.routes";
+import passwordRoutes from "./routes/password.routes";
 
 
 const app = express();
