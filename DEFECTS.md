@@ -32,10 +32,10 @@ The test currently fails with:
 A user requesting bookings for one company can receive booking data belonging to another company. This breaks tenant isolation and can expose customer/booking information across companies.
 
 **Fix:**
-Add `company_id = $1` to the SQL `WHERE` clause and pass both `companyId` and `agentCode` as query parameters. This ensures the query is restricted to the authenticated company's data.
+
 
 **Regression test:**
-`src/legacy/test/bookingRepository.test.ts::should only return bookings belonging to the requested company` — the test fails against the original implementation and passes after the fix.
+
 
 ---
 
@@ -51,10 +51,8 @@ Add `company_id = $1` to the SQL `WHERE` clause and pass both `companyId` and `a
 
 **Impact:** The first 25 records are skipped when requesting page 1. This causes users to miss the first page of booking results and shifts all subsequent pagination offsets.
 
-**Fix:** Change the calculation to `(params.page - 1) * params.limit`, so page 1 starts at offset 0, page 2 starts at offset 25, and page 3 starts at offset 50.
-
-**Regression test:** `src/legacy/test/pagination.test.ts::should return offset 0 for the first page` — it fails before the fix and passes after the fix.
-
+**Fix:** 
+**Regression test:** `
 ## D3 — CSV period filter uses incompatible date formats
 
 **Location:** `src/legacy/csvPeriod.ts:24-26`
@@ -72,9 +70,9 @@ The test currently fails with:
 
 **Impact:** Valid CSV booking rows can be excluded from the import preview when their dates fall within the requested period. This can cause the displayed booking count to be incorrect and may cause valid bookings to be missed during import processing.
 
-**Fix:** Convert each CSV `DD/MM/YYYY` date to ISO `YYYY-MM-DD` before comparing it with `periodStart` and `periodEnd`. This ensures all dates use the same format for comparison.
+**Fix:** 
 
-**Regression test:** `src/legacy/test/csvPeriod.test.ts::should include a CSV row when its DD/MM/YYYY date is inside the period` — it fails before the fix and passes after the fix.
+**Regression test:** 
 
 ## Anything you looked at and decided was *not* a defect
 
