@@ -6,12 +6,10 @@ export interface BookingCsvRow {
     product_code?: string;
 }
 
-
 export interface ParsedAmount {
     amount: string;
     currency: "LKR" | "USD";
 }
-
 
 export interface BookingValidationResult {
     valid: boolean;
@@ -19,48 +17,21 @@ export interface BookingValidationResult {
 
     bookingDate?: string;
 
-    /*
-     * Original currency supplied by CSV.
-     *
-     * If no currency is supplied,
-     * this will be LKR.
-     */
     currency?: "LKR" | "USD";
 
-    /*
-     * Original numeric amount before
-     * currency conversion.
-     */
     originalAmount?: string;
 
-    /*
-     * Amount that will be stored in DB.
-     *
-     * USD is converted to LKR before
-     * reaching the database.
-     */
     amount?: string;
 
     productCode?: string;
 }
 
-
 /*
  * ---------------------------------------------------------
  * DATE
  * ---------------------------------------------------------
- *
- * Supports:
- *
- * 03/04/2026
- * 3/4/2026
- * 3/04/2026
- * 03/4/2026
- *
- * Converts to:
- *
- * 2026-04-03
  */
+
 export function convertDate(
     value: string,
 ): string | null {
@@ -74,15 +45,9 @@ export function convertDate(
         return null;
     }
 
-    const day =
-        Number(match[1]);
-
-    const month =
-        Number(match[2]);
-
-    const year =
-        Number(match[3]);
-
+    const day = Number(match[1]);
+    const month = Number(match[2]);
+    const year = Number(match[3]);
 
     if (
         month < 1 ||
@@ -93,16 +58,13 @@ export function convertDate(
         return null;
     }
 
-
-    const date =
-        new Date(
-            Date.UTC(
-                year,
-                month - 1,
-                day,
-            ),
-        );
-
+    const date = new Date(
+        Date.UTC(
+            year,
+            month - 1,
+            day,
+        ),
+    );
 
     if (
         date.getUTCFullYear() !== year ||
@@ -112,85 +74,29 @@ export function convertDate(
         return null;
     }
 
-
     return [
         String(year),
-
-        String(month)
-            .padStart(2, "0"),
-
-        String(day)
-            .padStart(2, "0"),
+        String(month).padStart(2, "0"),
+        String(day).padStart(2, "0"),
     ].join("-");
 }
 
-
 /*
  * ---------------------------------------------------------
- * AMOUNT + CURRENCY PARSER
+ * AMOUNT
  * ---------------------------------------------------------
- *
- * Accepted:
- *
- * 5000
- * 5000.50
- *
- * USD5000
- * USD 5000
- * USD5000.50
- * USD 5000.50
- *
- * LKR5000
- * LKR 5000
- *
- * RS5000
- * RS 5000
- * Rs5000
- * Rs 5000
- * Rs.5000
- * Rs. 5000
- *
- *
- * If currency is missing:
- *
- * 5000
- *
- * it is treated as LKR.
- *
- *
- * Rejected:
- *
- * EUR500
- * GBP500
- * JPY500
- * Dollars500
- * 5,000
- * -500
- * 0
- * 5000.123
  */
+
 export function parseAmount(
     value: string,
 ): ParsedAmount | null {
 
-    const amount =
-        value.trim();
+    const amount = value.trim();
 
     if (!amount) {
         return null;
     }
 
-
-    /*
-     * -----------------------------------------------------
-     * USD
-     * -----------------------------------------------------
-     *
-     * USD4300
-     * USD 4300
-     * usd4300
-     * usd 4300
-     */
     let match =
         /^USD\s*(\d+(?:\.\d{1,2})?)$/i.exec(
             amount,
@@ -198,14 +104,12 @@ export function parseAmount(
 
     if (match) {
 
-        const numericAmount =
-            match[1];
+        const numericAmount = match[1];
 
-        if (numericAmount === undefined) {
-            return null;
-        }
-
-        if (Number(numericAmount) <= 0) {
+        if (
+            numericAmount === undefined ||
+            Number(numericAmount) <= 0
+        ) {
             return null;
         }
 
@@ -215,17 +119,6 @@ export function parseAmount(
         };
     }
 
-
-    /*
-     * -----------------------------------------------------
-     * LKR
-     * -----------------------------------------------------
-     *
-     * LKR5000
-     * LKR 5000
-     * lkr5000
-     * lkr 5000
-     */
     match =
         /^LKR\s*(\d+(?:\.\d{1,2})?)$/i.exec(
             amount,
@@ -233,14 +126,12 @@ export function parseAmount(
 
     if (match) {
 
-        const numericAmount =
-            match[1];
+        const numericAmount = match[1];
 
-        if (numericAmount === undefined) {
-            return null;
-        }
-
-        if (Number(numericAmount) <= 0) {
+        if (
+            numericAmount === undefined ||
+            Number(numericAmount) <= 0
+        ) {
             return null;
         }
 
@@ -250,19 +141,6 @@ export function parseAmount(
         };
     }
 
-
-    /*
-     * -----------------------------------------------------
-     * RS / RUPEE ALIASES
-     * -----------------------------------------------------
-     *
-     * RS5000
-     * RS 5000
-     * Rs5000
-     * Rs 5000
-     * Rs.5000
-     * Rs. 5000
-     */
     match =
         /^(?:RS|RS\.)\s*(\d+(?:\.\d{1,2})?)$/i.exec(
             amount,
@@ -270,14 +148,12 @@ export function parseAmount(
 
     if (match) {
 
-        const numericAmount =
-            match[1];
+        const numericAmount = match[1];
 
-        if (numericAmount === undefined) {
-            return null;
-        }
-
-        if (Number(numericAmount) <= 0) {
+        if (
+            numericAmount === undefined ||
+            Number(numericAmount) <= 0
+        ) {
             return null;
         }
 
@@ -287,17 +163,6 @@ export function parseAmount(
         };
     }
 
-
-    /*
-     * -----------------------------------------------------
-     * NO CURRENCY
-     * -----------------------------------------------------
-     *
-     * 5000
-     * 5000.50
-     *
-     * Default = LKR
-     */
     match =
         /^(\d+(?:\.\d{1,2})?)$/.exec(
             amount,
@@ -305,14 +170,12 @@ export function parseAmount(
 
     if (match) {
 
-        const numericAmount =
-            match[1];
+        const numericAmount = match[1];
 
-        if (numericAmount === undefined) {
-            return null;
-        }
-
-        if (Number(numericAmount) <= 0) {
+        if (
+            numericAmount === undefined ||
+            Number(numericAmount) <= 0
+        ) {
             return null;
         }
 
@@ -322,131 +185,73 @@ export function parseAmount(
         };
     }
 
-
-    /*
-     * Unsupported currency or invalid amount.
-     *
-     * Examples:
-     *
-     * EUR500
-     * GBP500
-     * JPY500
-     * Dollars500
-     * 5,000
-     * -500
-     * 5000.123
-     */
     return null;
 }
-
 
 /*
  * ---------------------------------------------------------
  * PRODUCTS
  * ---------------------------------------------------------
  */
-const allowedProducts =
-    new Set([
-        "TRAVEL",
-        "VISA",
-        "INSURANCE",
-    ]);
 
+const allowedProducts = new Set([
+    "TRAVEL",
+    "VISA",
+    "INSURANCE",
+]);
 
 /*
  * ---------------------------------------------------------
- * VALIDATE BOOKING ROW
+ * VALIDATE BOOKING
  * ---------------------------------------------------------
- *
- * This function performs ONLY pure validation.
- *
- * It does NOT access PostgreSQL.
- *
- * Currency conversion is performed by
- * importBookings(), because it requires
- * exchange_rates from the database.
  */
+
 export function validateBookingRow(
     row: BookingCsvRow,
 ): BookingValidationResult {
 
     const externalRef =
-        row.external_ref
-            ?.trim() ?? "";
-
+        row.external_ref?.trim() ?? "";
 
     const agentCode =
-        row.agent_code
-            ?.trim() ?? "";
-
+        row.agent_code?.trim() ?? "";
 
     const date =
-        row.date
-            ?.trim() ?? "";
-
+        row.date?.trim() ?? "";
 
     const amountValue =
-        row.amount
-            ?.trim() ?? "";
-
+        row.amount?.trim() ?? "";
 
     const productCode =
         row.product_code
             ?.trim()
             .toUpperCase() ?? "";
 
-
-    /*
-     * -----------------------------------------------------
-     * REF
-     * -----------------------------------------------------
-     */
     if (!externalRef) {
-
         return {
             valid: false,
-            reason:
-                "Ref is required.",
+            reason: "Ref is required.",
         };
     }
 
-
-    /*
-     * -----------------------------------------------------
-     * AGENT
-     * -----------------------------------------------------
-     */
     if (!agentCode) {
-
         return {
             valid: false,
-            reason:
-                "Agent Code is required.",
+            reason: "Agent Code is required.",
         };
     }
 
-
-    /*
-     * -----------------------------------------------------
-     * DATE
-     * -----------------------------------------------------
-     */
     if (!date) {
-
         return {
             valid: false,
-            reason:
-                "Booking Date is required.",
+            reason: "Booking Date is required.",
         };
     }
-
 
     const bookingDate =
         convertDate(date);
 
-
     if (!bookingDate) {
-
         return {
             valid: false,
             reason:
@@ -454,28 +259,17 @@ export function validateBookingRow(
         };
     }
 
-
-    /*
-     * -----------------------------------------------------
-     * AMOUNT + CURRENCY
-     * -----------------------------------------------------
-     */
     if (!amountValue) {
-
         return {
             valid: false,
-            reason:
-                "Amount is required.",
+            reason: "Amount is required.",
         };
     }
-
 
     const parsedAmount =
         parseAmount(amountValue);
 
-
     if (!parsedAmount) {
-
         return {
             valid: false,
             reason:
@@ -483,28 +277,14 @@ export function validateBookingRow(
         };
     }
 
-
-    /*
-     * -----------------------------------------------------
-     * PRODUCT
-     * -----------------------------------------------------
-     */
     if (!productCode) {
-
         return {
             valid: false,
-            reason:
-                "Product is required.",
+            reason: "Product is required.",
         };
     }
 
-
-    if (
-        !allowedProducts.has(
-            productCode,
-        )
-    ) {
-
+    if (!allowedProducts.has(productCode)) {
         return {
             valid: false,
             reason:
@@ -512,12 +292,6 @@ export function validateBookingRow(
         };
     }
 
-
-    /*
-     * -----------------------------------------------------
-     * SUCCESS
-     * -----------------------------------------------------
-     */
     return {
         valid: true,
 
@@ -530,11 +304,8 @@ export function validateBookingRow(
             parsedAmount.amount,
 
         /*
-         * At this point the amount is still
-         * the original amount.
-         *
-         * importBookings() will convert USD
-         * to LKR using exchange_rates.
+         * This is still the original amount.
+         * Conversion happens in booking.service.ts.
          */
         amount:
             parsedAmount.amount,

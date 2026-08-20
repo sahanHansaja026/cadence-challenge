@@ -30,16 +30,19 @@ export interface ImportResult {
  * GET EXCHANGE RATE
  * ---------------------------------------------------------
  *
- * Gets the latest exchange rate that was
- * effective on or before the booking date.
+ * Finds the latest rate effective on or before
+ * the booking date.
  *
  * Example:
  *
- * booking date = 2026-03-20
+ * Booking date = 2026-08-20
  *
- * It will find the most recent rate where:
+ * Rates:
  *
- * effective_from <= 2026-03-20
+ * 2026-08-01 = 318
+ * 2026-08-15 = 320
+ *
+ * Result = 320
  */
 async function getExchangeRate(
     currency: string,
@@ -52,7 +55,6 @@ async function getExchangeRate(
     if (currency === "LKR") {
         return "1";
     }
-
 
     const rows =
         await query<{
@@ -72,75 +74,38 @@ async function getExchangeRate(
             ],
         );
 
-
-    /*
-     * IMPORTANT:
-     *
-     * Do NOT use rows[0].rate_to_lkr
-     * directly.
-     *
-     * rows[0] may be undefined.
-     */
-    const rate =
-        rows[0]?.rate_to_lkr;
-
-
-    if (rate === undefined) {
-        return null;
-    }
-
-
-    return rate;
+    return rows[0]?.rate_to_lkr ?? null;
 }
 
 
 /*
  * ---------------------------------------------------------
- * CONVERT AMOUNT TO LKR
+ * CONVERT TO LKR
  * ---------------------------------------------------------
- *
- * Uses Decimal.js-style arithmetic through
- * PostgreSQL numeric operations.
- *
- * We let PostgreSQL perform the multiplication
- * because NUMERIC is exact.
  */
 async function convertToLkr(
     amount: string,
     currency: string,
     bookingDate: string,
-): Promise<string | null> {
+): Promise<{
+    amountLkr: string;
+    exchangeRate: string;
+} | null> {
 
-    /*
-     * Already LKR.
-     */
-    if (currency === "LKR") {
-        return amount;
-    }
-
-
-    /*
-     * Find exchange rate.
-     */
     const rate =
         await getExchangeRate(
             currency,
             bookingDate,
         );
 
-
     if (!rate) {
         return null;
     }
 
-
     /*
-     * PostgreSQL NUMERIC multiplication.
-     *
-     * ROUND(..., 2)
-     *
-     * because bookings.amount is
-     * numeric(14,2).
+     * PostgreSQL NUMERIC is used so
+     * we don't use JavaScript floating point
+     * arithmetic for money.
      */
     const rows =
         await query<{
@@ -159,11 +124,17 @@ async function convertToLkr(
             ],
         );
 
+    const amountLkr =
+        rows[0]?.amount_lkr;
 
-    return (
-        rows[0]?.amount_lkr ??
-        null
-    );
+    if (amountLkr === undefined) {
+        return null;
+    }
+
+    return {
+        amountLkr,
+        exchangeRate: rate,
+    };
 }
 
 
@@ -184,10 +155,6 @@ export async function importBookings(
         errors: [],
     };
 
-
-    /*
-     * Process each CSV row.
-     */
     for (const item of rows) {
 
         const rowNumber =
@@ -199,12 +166,11 @@ export async function importBookings(
 
         /*
          * -------------------------------------------------
-         * CSV VALIDATION
+         * VALIDATION
          * -------------------------------------------------
          */
         const validation =
             validateBookingRow(row);
-
 
         if (!validation.valid) {
 
@@ -222,13 +188,13 @@ export async function importBookings(
 
         /*
          * -------------------------------------------------
-         * NORMALIZED VALUES
+         * VALUES
          * -------------------------------------------------
          */
         const bookingDate =
             validation.bookingDate!;
 
-        const currency =
+        const originalCurrency =
             validation.currency!;
 
         const originalAmount =
@@ -237,19 +203,16 @@ export async function importBookings(
         const productCode =
             validation.productCode!;
 
-
         const externalRef =
-            row.external_ref
-                ?.trim() ?? "";
+            row.external_ref?.trim() ?? "";
 
         const agentCode =
-            row.agent_code
-                ?.trim() ?? "";
+            row.agent_code?.trim() ?? "";
 
 
         /*
          * -------------------------------------------------
-         * AGENT CHECK
+         * AGENT
          * -------------------------------------------------
          */
         const agents =
@@ -271,7 +234,6 @@ export async function importBookings(
                 ],
             );
 
-
         if (agents.length === 0) {
 
             result.rejected++;
@@ -288,7 +250,7 @@ export async function importBookings(
 
         /*
          * -------------------------------------------------
-         * DUPLICATE CHECK
+         * DUPLICATE
          * -------------------------------------------------
          */
         const duplicate =
@@ -308,7 +270,6 @@ export async function importBookings(
                 ],
             );
 
-
         if (duplicate.length > 0) {
 
             result.duplicates++;
@@ -325,43 +286,41 @@ export async function importBookings(
 
         /*
          * -------------------------------------------------
-         * CURRENCY CONVERSION
+         * EXCHANGE RATE
          * -------------------------------------------------
          *
-         * LKR:
+         * For LKR:
          *
-         * 5000
-         * ↓
-         * 5000
+         * original amount = 10000
+         * exchange rate   = 1
+         * LKR amount      = 10000
          *
          *
-         * USD:
+         * For USD:
          *
-         * USD100
-         * ↓
-         * exchange rate
-         * ↓
-         * 32000 LKR
+         * original amount = 100
+         * rate            = 318
+         * LKR amount      = 31800
          */
-        const amountLkr =
+        const conversion =
             await convertToLkr(
                 originalAmount,
-                currency,
+                originalCurrency,
                 bookingDate,
             );
 
 
         /*
-         * No exchange rate available.
+         * No applicable exchange rate.
          */
-        if (!amountLkr) {
+        if (!conversion) {
 
             result.rejected++;
 
             result.errors.push({
                 row: rowNumber,
                 reason:
-                    `No exchange rate found for ${currency} on or before ${bookingDate}.`,
+                    `No exchange rate found for ${originalCurrency} on or before ${bookingDate}.`,
             });
 
             continue;
@@ -370,16 +329,21 @@ export async function importBookings(
 
         /*
          * -------------------------------------------------
-         * INSERT
+         * INSERT BOOKING
          * -------------------------------------------------
          *
-         * IMPORTANT:
+         * We store BOTH:
          *
-         * amount = LKR amount
+         * original_amount
+         * original_currency
+         * exchange_rate
+         *
+         * AND:
+         *
+         * amount = converted LKR amount
          * currency = LKR
          *
-         * This keeps the bookings table
-         * normalized to LKR.
+         * This gives us a complete audit trail.
          */
         await query(
             `
@@ -391,7 +355,10 @@ export async function importBookings(
                 booking_date,
                 amount,
                 currency,
-                product_code
+                product_code,
+                original_amount,
+                original_currency,
+                exchange_rate
             )
             VALUES (
                 $1,
@@ -401,7 +368,10 @@ export async function importBookings(
                 $5,
                 $6,
                 'LKR',
-                $7
+                $7,
+                $8,
+                $9,
+                $10
             )
             `,
             [
@@ -415,16 +385,21 @@ export async function importBookings(
 
                 bookingDate,
 
-                amountLkr,
+                conversion.amountLkr,
 
                 productCode,
+
+                originalAmount,
+
+                originalCurrency,
+
+                conversion.exchangeRate,
             ],
         );
 
 
         result.accepted++;
     }
-
 
     return result;
 }

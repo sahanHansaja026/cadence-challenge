@@ -8,31 +8,46 @@ import { parse } from "csv-parse/sync";
 import {
     importBookings,
 } from "../services/booking.service";
+import { CsvBookingRow } from "../schemas/booking.schema";
 
-import type {
-    CsvBookingRow,
-} from "../schemas/booking.schema";
+
+
 
 interface CsvParsedRow {
+
     Ref?: string;
+
     "Agent Code"?: string;
+
     "Booking Date"?: string;
+
     Amount?: string;
+
     Product?: string;
+
     Notes?: string;
 
-    [key: string]: string | undefined;
+    [key: string]:
+    | string
+    | undefined;
 }
 
+
 interface ImportRejection {
+
     row: number;
+
     reason: string;
 }
 
+
 export interface BookingImportRow {
+
     rowNumber: number;
+
     data: CsvBookingRow;
 }
+
 
 export async function importBookingsController(
     req: Request,
@@ -40,141 +55,144 @@ export async function importBookingsController(
 ): Promise<void> {
 
     /*
-     * Authentication
+     * -----------------------------------------------------
+     * AUTHENTICATION
+     * -----------------------------------------------------
      */
-
     if (!req.user) {
+
         res.status(401).json({
             error: {
                 code: "UNAUTHORIZED",
-                message: "Authentication required.",
+                message:
+                    "Authentication required.",
             },
         });
 
         return;
     }
 
-    /*
-     * File validation
-     */
 
+    /*
+     * -----------------------------------------------------
+     * FILE
+     * -----------------------------------------------------
+     */
     if (!req.file) {
+
         res.status(400).json({
             error: {
                 code: "FILE_REQUIRED",
-                message: "CSV file is required.",
+                message:
+                    "CSV file is required.",
             },
         });
 
         return;
     }
+
 
     try {
 
         /*
-         * Convert uploaded file to text
+         * -------------------------------------------------
+         * READ CSV
+         * -------------------------------------------------
          */
-
         const csvText =
-            req.file.buffer.toString("utf-8");
+            req.file.buffer.toString(
+                "utf-8",
+            );
+
 
         /*
-         * Parse CSV
-         *
-         * relax_column_count allows extra columns.
-         *
-         * Example:
-         *
-         * Ref,Agent Code,Booking Date,Amount,Product,Notes
-         *
-         * and even:
-         *
-         * Ref,Agent Code,Booking Date,Amount,Product,Notes,Extra
+         * -------------------------------------------------
+         * PARSE CSV
+         * -------------------------------------------------
          */
+        const rows =
+            parse(csvText, {
 
-        const rows = parse(csvText, {
-            columns: true,
-            skip_empty_lines: true,
-            trim: true,
-            relax_column_count: true,
-            relax_quotes: true,
-            info: true,
-        }) as Array<{
-            record: CsvParsedRow;
-            info: {
-                lines: number;
-            };
-        }>;
+                columns: true,
+
+                skip_empty_lines: true,
+
+                trim: true,
+
+                relax_column_count: true,
+
+                relax_quotes: true,
+
+            }) as CsvParsedRow[];
+
+
+        const csvRows:
+            BookingImportRow[] = [];
+
+
+        const rejections:
+            ImportRejection[] = [];
+
 
         /*
-         * Valid rows that will be sent
-         * to the booking service.
+         * -------------------------------------------------
+         * PROCESS CSV ROWS
+         * -------------------------------------------------
          */
-
-        const csvRows: BookingImportRow[] = [];
-
-        /*
-         * Errors detected directly by
-         * the controller.
-         */
-
-        const rejections: ImportRejection[] = [];
-
-        /*
-         * Process every CSV row.
-         */
-
-        for (const item of rows) {
+        for (
+            let index = 0;
+            index < rows.length;
+            index++
+        ) {
 
             const row =
-                item.record;
+                rows[index];
+
 
             /*
-             * csv-parse "lines" can move because of
-             * quoted/multiline fields.
-             *
-             * For this CSV we use the actual record
-             * position instead.
-             *
              * Header = row 1
-             * Data starts = row 2
+             * First data row = row 2
              */
-
             const rowNumber =
-                rows.indexOf(item) + 2;
+                index + 2;
 
-            /*
-             * Extract fields.
-             */
 
             const externalRef =
-                row.Ref?.trim() ?? "";
+                row?.Ref?.trim() ?? "";
+
 
             const agentCode =
-                row["Agent Code"]?.trim() ?? "";
+                row?.["Agent Code"]
+                    ?.trim() ?? "";
+
 
             const date =
-                row["Booking Date"]?.trim() ?? "";
+                row?.["Booking Date"]
+                    ?.trim() ?? "";
+
 
             const amount =
-                row.Amount?.trim() ?? "";
+                row?.Amount?.trim() ?? "";
+
 
             const productCode =
-                row.Product?.trim() ?? "";
+                row?.Product?.trim() ?? "";
+
 
             /*
-             * Required field validation.
+             * Required fields.
              */
-
             if (!externalRef) {
 
                 rejections.push({
                     row: rowNumber,
-                    reason: "Ref is required.",
+                    reason:
+                        "Ref is required.",
                 });
 
                 continue;
             }
+
 
             if (!agentCode) {
 
@@ -187,6 +205,7 @@ export async function importBookingsController(
                 continue;
             }
 
+
             if (!date) {
 
                 rejections.push({
@@ -197,6 +216,7 @@ export async function importBookingsController(
 
                 continue;
             }
+
 
             if (!amount) {
 
@@ -209,6 +229,7 @@ export async function importBookingsController(
                 continue;
             }
 
+
             if (!productCode) {
 
                 rejections.push({
@@ -220,16 +241,16 @@ export async function importBookingsController(
                 continue;
             }
 
-            /*
-             * Send valid controller-level rows
-             * to the service together with their
-             * ORIGINAL CSV row number.
-             */
 
+            /*
+             * Send row to booking service.
+             */
             csvRows.push({
+
                 rowNumber,
 
                 data: {
+
                     external_ref:
                         externalRef,
 
@@ -246,23 +267,30 @@ export async function importBookingsController(
             });
         }
 
-        /*
-         * Import valid rows.
-         */
 
+        /*
+         * -------------------------------------------------
+         * IMPORT
+         * -------------------------------------------------
+         */
         const summary =
             await importBookings(
                 req.user.companyId,
                 csvRows,
             );
 
-        /*
-         * Return result.
-         */
 
+        /*
+         * -------------------------------------------------
+         * RESPONSE
+         * -------------------------------------------------
+         */
         res.status(200).json({
+
             data: {
+
                 summary: {
+
                     accepted:
                         summary.accepted,
 
@@ -288,8 +316,11 @@ export async function importBookingsController(
             error,
         );
 
+
         res.status(500).json({
+
             error: {
+
                 code:
                     "BOOKING_IMPORT_FAILED",
 

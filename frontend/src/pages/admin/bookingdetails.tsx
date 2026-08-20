@@ -6,127 +6,191 @@ import Button from "../../component/ui/Button";
 import api from "../../services/api";
 import { useNavigate } from "react-router-dom";
 
+
 interface Booking {
     id: string;
     agent_code: string;
     customer_name: string;
     product_code: string;
+
+    // Final reporting amount
     amount: string;
     currency: string;
+
+    // Original charged amount
+    original_amount: string;
+    original_currency: string;
+
+    // Rate used for conversion
+    exchange_rate: string | null;
+
     booking_date: string;
     status: string;
     company_id: string;
 }
 
+
 function ViewBookings() {
-    const { user, isLoading } = useAuth();
-    const navigate = useNavigate();
+
+    const {
+        user,
+        isLoading,
+    } = useAuth();
+
+
+    const navigate =
+        useNavigate();
+
 
     const {
         adminAuthorization,
     } = useAuthorizationCheck();
 
-    const [bookings, setBookings] =
-        useState<Booking[]>([]);
 
-    const [loadingBookings, setLoadingBookings] =
-        useState(false);
+    const [
+        bookings,
+        setBookings,
+    ] = useState<Booking[]>([]);
 
-    const [error, setError] =
-        useState("");
+
+    const [
+        loadingBookings,
+        setLoadingBookings,
+    ] = useState(false);
+
+
+    const [
+        error,
+        setError,
+    ] = useState("");
+
 
     /*
-     * Admin authorization
+     * -----------------------------------------------------
+     * ADMIN AUTHORIZATION
+     * -----------------------------------------------------
      */
     useEffect(() => {
+
         if (!isLoading) {
             adminAuthorization();
         }
-    }, [isLoading]);
+
+    }, [
+        isLoading,
+    ]);
+
 
     /*
-     * Get bookings
+     * -----------------------------------------------------
+     * GET BOOKINGS
+     * -----------------------------------------------------
      */
     useEffect(() => {
+
         if (!isLoading) {
             fetchBookings();
         }
-    }, [isLoading]);
 
-    const fetchBookings = async () => {
-        try {
-            setLoadingBookings(true);
-            setError("");
+    }, [
+        isLoading,
+    ]);
 
-            const token =
-                localStorage.getItem("token");
 
-            const response =
-                await api.get(
-                    "/bookings",
-                    {
-                        headers: {
-                            Authorization:
-                                `Bearer ${token}`,
+    const fetchBookings =
+        async () => {
+
+            try {
+
+                setLoadingBookings(true);
+
+                setError("");
+
+
+                const token =
+                    localStorage.getItem(
+                        "token",
+                    );
+
+
+                const response =
+                    await api.get(
+                        "/bookings",
+                        {
+                            headers: {
+                                Authorization:
+                                    `Bearer ${token}`,
+                            },
                         },
-                    },
+                    );
+
+
+                setBookings(
+                    response.data.data.bookings,
                 );
 
-            setBookings(
-                response.data.data.bookings,
-            );
 
-        } catch (error: unknown) {
+            } catch (error: unknown) {
 
-            console.error(
-                "Fetch bookings error:",
-                error,
-            );
+                console.error(
+                    "Fetch bookings error:",
+                    error,
+                );
 
-            const axiosError =
-                error as {
-                    response?: {
-                        data?: {
-                            error?: {
-                                message?: string;
+
+                const axiosError =
+                    error as {
+                        response?: {
+                            data?: {
+                                error?: {
+                                    message?: string;
+                                };
                             };
                         };
                     };
-                };
 
-            setError(
-                axiosError.response?.data?.error
-                    ?.message ||
-                "Failed to load bookings.",
-            );
 
-        } finally {
-            setLoadingBookings(false);
-        }
-    };
+                setError(
+                    axiosError.response?.data
+                        ?.error?.message ||
+                    "Failed to load bookings.",
+                );
+
+
+            } finally {
+
+                setLoadingBookings(false);
+            }
+        };
+
 
     /*
-     * Edit booking
+     * -----------------------------------------------------
+     * EDIT BOOKING
+     * -----------------------------------------------------
      */
     const handleEdit = (
         bookingId: string,
     ) => {
+
         navigate(
             `/editbooking/${bookingId}`,
         );
     };
 
+
     /*
-     * Reject booking
+     * -----------------------------------------------------
+     * REJECT BOOKING
+     * -----------------------------------------------------
      *
-     * This does NOT delete the booking.
+     * This does not delete the booking.
      *
-     * Backend:
+     * Backend changes:
      *
-     * POST /api/bookings/:id/reject
+     * status = REJECTED
      *
-     * The booking remains in the database
-     * with status = REJECTED.
+     * -----------------------------------------------------
      */
     const handleReject = async (
         bookingId: string,
@@ -137,14 +201,19 @@ function ViewBookings() {
                 "Are you sure you want to reject this booking?",
             );
 
+
         if (!confirmed) {
             return;
         }
 
+
         try {
 
             const token =
-                localStorage.getItem("token");
+                localStorage.getItem(
+                    "token",
+                );
+
 
             const response =
                 await api.post(
@@ -158,16 +227,18 @@ function ViewBookings() {
                     },
                 );
 
+
             /*
-             * Get the updated booking returned
-             * by the backend.
+             * Backend returns the
+             * updated booking.
              */
             const updatedBooking =
                 response.data.data.booking;
 
+
             /*
-             * Update only this booking
-             * in the current table.
+             * Update only the
+             * rejected booking.
              */
             setBookings(
                 (currentBookings) =>
@@ -179,12 +250,14 @@ function ViewBookings() {
                     ),
             );
 
+
         } catch (error: unknown) {
 
             console.error(
                 "Reject booking error:",
                 error,
             );
+
 
             const axiosError =
                 error as {
@@ -197,15 +270,23 @@ function ViewBookings() {
                     };
                 };
 
+
             setError(
-                axiosError.response?.data?.error
-                    ?.message ||
+                axiosError.response?.data
+                    ?.error?.message ||
                 "Failed to reject booking.",
             );
         }
     };
 
+
+    /*
+     * -----------------------------------------------------
+     * LOADING AUTH
+     * -----------------------------------------------------
+     */
     if (isLoading) {
+
         return (
             <div>
                 Loading...
@@ -213,23 +294,37 @@ function ViewBookings() {
         );
     }
 
+
     return (
+
         <div className="flex min-h-screen bg-gray-50">
 
-            {/* Sidebar */}
+            {/* ------------------------------------------------
+                 SIDEBAR
+            ------------------------------------------------- */}
+
             <SidebarAdmin
                 activeItem="Booking Details"
             />
 
-            {/* Main */}
+
+            {/* ------------------------------------------------
+                 MAIN CONTENT
+            ------------------------------------------------- */}
+
             <main className="flex-1 p-8">
 
-                {/* Header */}
+
+                {/* ------------------------------------------------
+                     HEADER
+                ------------------------------------------------- */}
+
                 <div className="mb-8">
 
                     <h1 className="text-3xl font-bold text-gray-900">
                         Bookings
                     </h1>
+
 
                     <p className="mt-2 text-sm text-gray-500">
                         View and manage bookings
@@ -238,61 +333,115 @@ function ViewBookings() {
 
                 </div>
 
-                {/* Error */}
+
+                {/* ------------------------------------------------
+                     ERROR
+                ------------------------------------------------- */}
+
                 {error && (
+
                     <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
+
                         {error}
+
                     </div>
                 )}
 
-                {/* Table */}
+
+                {/* ------------------------------------------------
+                     TABLE
+                ------------------------------------------------- */}
+
                 <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+
+
+                    {/* ------------------------------------------------
+                         LOADING
+                    ------------------------------------------------- */}
 
                     {loadingBookings ? (
 
                         <div className="p-6 text-sm text-gray-500">
+
                             Loading bookings...
+
                         </div>
+
 
                     ) : bookings.length === 0 ? (
 
+
+                        /* ------------------------------------------------
+                             EMPTY
+                        ------------------------------------------------- */
+
                         <div className="p-6 text-sm text-gray-500">
+
                             No bookings found.
+
                         </div>
 
+
                     ) : (
+
+
+                        /* ------------------------------------------------
+                             BOOKING TABLE
+                        ------------------------------------------------- */
 
                         <div className="overflow-x-auto">
 
                             <table className="w-full text-left">
 
+
+                                {/* ------------------------------------------------
+                                     TABLE HEADER
+                                ------------------------------------------------- */}
+
                                 <thead className="border-b border-gray-200 bg-gray-50">
 
                                     <tr>
+
 
                                         <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-gray-500">
                                             Booking ID
                                         </th>
 
+
                                         <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-gray-500">
                                             Agent
                                         </th>
+
 
                                         <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-gray-500">
                                             Product
                                         </th>
 
+
                                         <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                            Amount
+                                            Original Amount
                                         </th>
+
+
+                                        <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                            LKR Amount
+                                        </th>
+
+
+                                        <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                            Exchange Rate
+                                        </th>
+
 
                                         <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-gray-500">
                                             Booking Date
                                         </th>
 
+
                                         <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-gray-500">
                                             Status
                                         </th>
+
 
                                         <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-gray-500">
                                             Actions
@@ -301,6 +450,11 @@ function ViewBookings() {
                                     </tr>
 
                                 </thead>
+
+
+                                {/* ------------------------------------------------
+                                     TABLE BODY
+                                ------------------------------------------------- */}
 
                                 <tbody className="divide-y divide-gray-200">
 
@@ -314,40 +468,114 @@ function ViewBookings() {
                                                 className="hover:bg-gray-50"
                                             >
 
+
+                                                {/* --------------------------------
+                                                     BOOKING ID
+                                                --------------------------------- */}
+
                                                 <td className="px-6 py-4 text-sm font-medium text-gray-900">
+
                                                     {
                                                         booking.id
                                                     }
+
                                                 </td>
 
+
+                                                {/* --------------------------------
+                                                     AGENT
+                                                --------------------------------- */}
+
                                                 <td className="px-6 py-4 text-sm text-gray-700">
+
                                                     {
                                                         booking.agent_code
                                                     }
+
                                                 </td>
 
+
+                                                {/* --------------------------------
+                                                     PRODUCT
+                                                --------------------------------- */}
+
                                                 <td className="px-6 py-4 text-sm text-gray-700">
+
                                                     {
                                                         booking.product_code
                                                     }
+
                                                 </td>
 
+
+                                                {/* --------------------------------
+                                                     ORIGINAL AMOUNT
+                                                --------------------------------- */}
+
                                                 <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                                                    {
-                                                        booking.currency
-                                                    }{" "}
+
+                                                    <div>
+
+                                                        <span>
+                                                            {
+                                                                booking.original_currency
+                                                            }{" "}
+                                                            {
+                                                                booking.original_amount
+                                                            }
+                                                        </span>
+
+                                                    </div>
+
+                                                </td>
+
+
+                                                {/* --------------------------------
+                                                     FINAL LKR AMOUNT
+                                                --------------------------------- */}
+
+                                                <td className="px-6 py-4 text-sm font-medium text-gray-900">
+
+                                                    LKR{" "}
+
                                                     {
                                                         booking.amount
                                                     }
+
                                                 </td>
 
+
+                                                {/* --------------------------------
+                                                     EXCHANGE RATE
+                                                --------------------------------- */}
+
+                                                <td className="px-6 py-4 text-sm text-gray-700">
+
+                                                    {
+                                                        booking.exchange_rate
+                                                    }
+
+                                                </td>
+
+
+                                                {/* --------------------------------
+                                                     BOOKING DATE
+                                                --------------------------------- */}
+
                                                 <td className="px-6 py-4 text-sm text-gray-500">
+
                                                     {
                                                         new Date(
                                                             booking.booking_date,
                                                         ).toLocaleDateString()
                                                     }
+
                                                 </td>
+
+
+                                                {/* --------------------------------
+                                                     STATUS
+                                                --------------------------------- */}
 
                                                 <td className="px-6 py-4">
 
@@ -355,28 +583,44 @@ function ViewBookings() {
                                                         className={
                                                             booking.status ===
                                                                 "REJECTED"
+
                                                                 ? "rounded-md bg-red-100 px-2.5 py-1 text-xs font-medium text-red-700"
+
                                                                 : "rounded-md bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700"
                                                         }
                                                     >
+
                                                         {
                                                             booking.status
                                                         }
+
                                                     </span>
 
                                                 </td>
 
+
+                                                {/* --------------------------------
+                                                     ACTIONS
+                                                --------------------------------- */}
+
                                                 <td className="px-6 py-4">
 
-                                                    {user?.role === "AGENT" ? (
+
+                                                    {user?.role ===
+                                                        "AGENT" ? (
 
                                                         <span className="text-sm text-gray-400">
+
                                                             View only
+
                                                         </span>
 
                                                     ) : (
 
                                                         <div className="flex gap-2">
+
+
+                                                            {/* EDIT */}
 
                                                             <Button
                                                                 type="button"
@@ -391,8 +635,13 @@ function ViewBookings() {
                                                                     "REJECTED"
                                                                 }
                                                             >
+
                                                                 Edit
+
                                                             </Button>
+
+
+                                                            {/* REJECT */}
 
                                                             <Button
                                                                 type="button"
@@ -407,11 +656,12 @@ function ViewBookings() {
                                                                     "REJECTED"
                                                                 }
                                                             >
+
                                                                 Reject
+
                                                             </Button>
 
                                                         </div>
-
                                                     )}
 
                                                 </td>
@@ -426,7 +676,6 @@ function ViewBookings() {
                             </table>
 
                         </div>
-
                     )}
 
                 </div>
@@ -436,5 +685,6 @@ function ViewBookings() {
         </div>
     );
 }
+
 
 export default ViewBookings;
