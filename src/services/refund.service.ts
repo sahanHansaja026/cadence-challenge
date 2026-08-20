@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import Decimal from "decimal.js";
 
 import {
     query,
@@ -10,11 +11,6 @@ import type {
 } from "../schemas/refund.schema";
 
 
-/*
- * ---------------------------------------------------------
- * REFUND TYPE
- * ---------------------------------------------------------
- */
 export interface Refund {
 
     id: string;
@@ -23,13 +19,6 @@ export interface Refund {
 
     booking_id: string;
 
-    /*
-     * The payout run that contained
-     * the booking.
-     *
-     * NULL means the booking has not
-     * been included in a payout run.
-     */
     payout_run_id: string | null;
 
     amount: string;
@@ -45,17 +34,21 @@ export interface Refund {
 
     created_at: string;
 
-    /*
-     * TRUE when the booking was already
-     * included in a FINALIZED payout.
-     *
-     * The finalized payout must NOT be
-     * modified.
-     *
-     * Instead the refund becomes an
-     * adjustment for a future payout.
-     */
     adjustment_required: boolean;
+}
+
+
+export interface RefundAdjustment {
+
+    id: string;
+
+    booking_id: string;
+
+    payout_run_id: string | null;
+
+    amount: string;
+
+    reason: string;
 }
 
 
@@ -63,10 +56,8 @@ export interface Refund {
  * ---------------------------------------------------------
  * GET ALL REFUNDS
  * ---------------------------------------------------------
- *
- * Only refunds belonging to the
- * authenticated user's company.
  */
+
 export async function getRefunds(
     companyId: string,
 ): Promise<Refund[]> {
@@ -84,8 +75,11 @@ export async function getRefunds(
             created_by,
             created_at,
             adjustment_required
+
         FROM refunds
+
         WHERE company_id = $1
+
         ORDER BY created_at DESC
         `,
         [
@@ -99,11 +93,8 @@ export async function getRefunds(
  * ---------------------------------------------------------
  * GET REFUND BY ID
  * ---------------------------------------------------------
- *
- * company_id is always included.
- *
- * This prevents cross-company access.
  */
+
 export async function getRefundById(
     companyId: string,
     refundId: string,
@@ -123,9 +114,12 @@ export async function getRefundById(
                 created_by,
                 created_at,
                 adjustment_required
+
             FROM refunds
+
             WHERE id = $1
               AND company_id = $2
+
             LIMIT 1
             `,
             [
@@ -142,32 +136,18 @@ export async function getRefundById(
  * ---------------------------------------------------------
  * CREATE REFUND
  * ---------------------------------------------------------
- *
- * Business flow:
- *
- * 1. Find booking.
- * 2. Verify booking belongs to company.
- * 3. Validate refund amount.
- * 4. Check previous refunds.
- * 5. Find exact payout relationship using
- *    payout_booking_items.
- * 6. Determine whether payout is FINALIZED.
- * 7. Never modify FINALIZED payout.
- * 8. Create refund.
- * 9. Mark adjustment_required when necessary.
  */
+
 export async function createRefund(
     companyId: string,
     userId: string,
     input: CreateRefundInput,
 ): Promise<Refund> {
 
-
     /*
-     * -----------------------------------------------------
-     * 1. FIND BOOKING
-     * -----------------------------------------------------
+     * 1. Find booking.
      */
+
     const bookings =
         await query<{
             id: string;
@@ -181,9 +161,12 @@ export async function createRefund(
                 company_id,
                 amount,
                 status
+
             FROM bookings
+
             WHERE id = $1
               AND company_id = $2
+
             LIMIT 1
             `,
             [
@@ -192,13 +175,10 @@ export async function createRefund(
             ],
         );
 
-
     const booking =
         bookings[0];
 
-
     if (!booking) {
-
         throw new Error(
             "BOOKING_NOT_FOUND",
         );
@@ -206,38 +186,28 @@ export async function createRefund(
 
 
     /*
-     * -----------------------------------------------------
-     * 2. REFUND AMOUNT
-     * -----------------------------------------------------
+     * 2. Validate refund amount.
      */
-    const refundAmount =
-        Number(input.amount);
 
+    const refundAmount =
+        new Decimal(input.amount);
 
     const bookingAmount =
-        Number(booking.amount);
-
+        new Decimal(booking.amount);
 
     if (
-        !Number.isFinite(
-            refundAmount,
-        ) ||
-        refundAmount <= 0
+        !refundAmount.isFinite() ||
+        refundAmount.lte(0)
     ) {
-
         throw new Error(
             "INVALID_REFUND_AMOUNT",
         );
     }
 
-
     if (
-        !Number.isFinite(
-            bookingAmount,
-        ) ||
-        bookingAmount <= 0
+        !bookingAmount.isFinite() ||
+        bookingAmount.lte(0)
     ) {
-
         throw new Error(
             "INVALID_BOOKING_AMOUNT",
         );
@@ -245,12 +215,11 @@ export async function createRefund(
 
 
     /*
-     * -----------------------------------------------------
-     * 3. CHECK PREVIOUS REFUNDS
-     * -----------------------------------------------------
+     * 3. Calculate previous refunds.
      *
-     * CANCELLED refunds don't count.
+     * CANCELLED refunds do not count.
      */
+
     const previous =
         await query<{
             total: string;
@@ -261,7 +230,9 @@ export async function createRefund(
                     SUM(amount),
                     0
                 ) AS total
+
             FROM refunds
+
             WHERE booking_id = $1
               AND company_id = $2
               AND status <> 'CANCELLED'
@@ -272,24 +243,21 @@ export async function createRefund(
             ],
         );
 
-
     const alreadyRefunded =
-        Number(
+        new Decimal(
             previous[0]?.total ?? "0",
         );
 
 
     /*
-     * -----------------------------------------------------
-     * 4. PREVENT OVER-REFUND
-     * -----------------------------------------------------
+     * 4. Prevent over-refund.
      */
-    if (
-        alreadyRefunded +
-        refundAmount >
-        bookingAmount
-    ) {
 
+    if (
+        alreadyRefunded
+            .plus(refundAmount)
+            .gt(bookingAmount)
+    ) {
         throw new Error(
             "REFUND_AMOUNT_EXCEEDS_BOOKING",
         );
@@ -297,32 +265,25 @@ export async function createRefund(
 
 
     /*
-     * -----------------------------------------------------
-     * 5. FIND EXACT PAYOUT RELATIONSHIP
-     * -----------------------------------------------------
+     * 5. Find payout containing booking.
      *
      * IMPORTANT:
      *
-     * Do NOT join through agent_code.
-     *
-     * payout_line_items is aggregated by agent.
-     *
-     * payout_booking_items identifies the exact
-     * booking included in the payout.
+     * We use payout_booking_items.
      */
+
     const payoutRuns =
         await query<{
             id: string;
-
             status:
             | "DRAFT"
             | "FINALISED";
-
         }>(
             `
             SELECT
                 pr.id,
                 pr.status
+
             FROM payout_runs pr
 
             INNER JOIN payout_booking_items pbi
@@ -346,40 +307,27 @@ export async function createRefund(
             ],
         );
 
-
     const payoutRun =
         payoutRuns[0];
 
 
     /*
-     * -----------------------------------------------------
-     * 6. DETERMINE PAYOUT
-     * -----------------------------------------------------
+     * 6. Determine payout information.
      */
+
     const payoutRunId =
         payoutRun?.id ?? null;
 
-
-    /*
-     * If the booking was already included
-     * in a FINALIZED payout, the existing
-     * payout MUST NOT be changed.
-     *
-     * The refund will instead be applied
-     * as an adjustment in a future payout.
-     */
     const adjustmentRequired =
         payoutRun?.status === "FINALISED";
 
 
     /*
-     * -----------------------------------------------------
-     * 7. CREATE REFUND
-     * -----------------------------------------------------
+     * 7. Create refund.
      */
+
     const refundId =
         `refund_${randomUUID()}`;
-
 
     const refunds =
         await query<Refund>(
@@ -395,6 +343,7 @@ export async function createRefund(
                 created_by,
                 adjustment_required
             )
+
             VALUES (
                 $1,
                 $2,
@@ -406,6 +355,7 @@ export async function createRefund(
                 $7,
                 $8
             )
+
             RETURNING
                 id,
                 company_id,
@@ -423,25 +373,21 @@ export async function createRefund(
                 companyId,
                 input.bookingId,
                 payoutRunId,
-                input.amount,
+                refundAmount.toFixed(2),
                 input.reason,
                 userId,
                 adjustmentRequired,
             ],
         );
 
-
     const refund =
         refunds[0];
 
-
     if (!refund) {
-
         throw new Error(
             "REFUND_CREATION_FAILED",
         );
     }
-
 
     return refund;
 }
@@ -451,65 +397,32 @@ export async function createRefund(
  * ---------------------------------------------------------
  * UPDATE REFUND STATUS
  * ---------------------------------------------------------
- *
- * COMPANY_ADMIN / FINANCE only.
- *
- * PENDING
- *    ↓
- * PROCESSED
- *
- * OR
- *
- * PENDING
- *    ↓
- * CANCELLED
  */
+
 export async function updateRefundStatus(
     companyId: string,
     refundId: string,
     input: UpdateRefundStatusInput,
 ): Promise<Refund | null> {
 
-
-    /*
-     * -----------------------------------------------------
-     * 1. FIND REFUND
-     * -----------------------------------------------------
-     */
     const existing =
         await getRefundById(
             companyId,
             refundId,
         );
 
-
     if (!existing) {
-
         return null;
     }
 
 
     /*
-     * -----------------------------------------------------
-     * 2. PREVENT INVALID TRANSITIONS
-     * -----------------------------------------------------
+     * Processed refunds cannot change.
      */
-    if (
-        existing.status ===
-        "CANCELLED"
-    ) {
-
-        throw new Error(
-            "REFUND_ALREADY_CANCELLED",
-        );
-    }
-
 
     if (
-        existing.status ===
-        "PROCESSED"
+        existing.status === "PROCESSED"
     ) {
-
         throw new Error(
             "REFUND_ALREADY_PROCESSED",
         );
@@ -517,17 +430,34 @@ export async function updateRefundStatus(
 
 
     /*
-     * -----------------------------------------------------
-     * 3. UPDATE STATUS
-     * -----------------------------------------------------
+     * Cancelled refunds cannot change.
      */
+
+    if (
+        existing.status === "CANCELLED"
+    ) {
+        throw new Error(
+            "REFUND_ALREADY_CANCELLED",
+        );
+    }
+
+
+    /*
+     * Update status.
+     */
+
     const refunds =
         await query<Refund>(
             `
             UPDATE refunds
-            SET status = $1
+
+            SET
+                status = $1
+
             WHERE id = $2
               AND company_id = $3
+              AND status = 'PENDING'
+
             RETURNING
                 id,
                 company_id,
@@ -547,6 +477,165 @@ export async function updateRefundStatus(
             ],
         );
 
+    return refunds[0] ?? null;
+}
+
+
+/*
+ * ---------------------------------------------------------
+ * GET REFUND ADJUSTMENTS
+ * ---------------------------------------------------------
+ */
+
+export async function getRefundAdjustmentsForPayout(
+    companyId: string,
+): Promise<RefundAdjustment[]> {
+
+    return query<RefundAdjustment>(
+        `
+        SELECT
+            id,
+            booking_id,
+            payout_run_id,
+            amount,
+            reason
+
+        FROM refunds
+
+        WHERE company_id = $1
+          AND status = 'PROCESSED'
+          AND adjustment_required = TRUE
+
+        ORDER BY created_at ASC
+        `,
+        [
+            companyId,
+        ],
+    );
+}
+
+
+/*
+ * ---------------------------------------------------------
+ * GET TOTAL REFUND ADJUSTMENTS
+ * ---------------------------------------------------------
+ */
+
+export async function getRefundAdjustmentTotal(
+    companyId: string,
+): Promise<string> {
+
+    const rows =
+        await query<{
+            total: string;
+        }>(
+            `
+            SELECT
+                COALESCE(
+                    SUM(amount),
+                    0
+                ) AS total
+
+            FROM refunds
+
+            WHERE company_id = $1
+              AND status = 'PROCESSED'
+              AND adjustment_required = TRUE
+            `,
+            [
+                companyId,
+            ],
+        );
+
+    const total =
+        new Decimal(
+            rows[0]?.total ?? "0",
+        );
+
+    return total.toFixed(2);
+}
+
+
+/*
+ * ---------------------------------------------------------
+ * GET PENDING REFUND ADJUSTMENTS
+ * ---------------------------------------------------------
+ */
+
+export async function getPendingRefundAdjustments(
+    companyId: string,
+): Promise<Refund[]> {
+
+    return query<Refund>(
+        `
+        SELECT
+            id,
+            company_id,
+            booking_id,
+            payout_run_id,
+            amount,
+            reason,
+            status,
+            created_by,
+            created_at,
+            adjustment_required
+
+        FROM refunds
+
+        WHERE company_id = $1
+          AND status = 'PROCESSED'
+          AND adjustment_required = TRUE
+
+        ORDER BY created_at ASC
+        `,
+        [
+            companyId,
+        ],
+    );
+}
+
+
+/*
+ * ---------------------------------------------------------
+ * MARK REFUND ADJUSTMENT APPLIED
+ * ---------------------------------------------------------
+ */
+
+export async function markRefundAdjustmentApplied(
+    companyId: string,
+    refundId: string,
+): Promise<Refund | null> {
+
+    const refunds =
+        await query<Refund>(
+            `
+            UPDATE refunds
+
+            SET
+                adjustment_required = FALSE
+
+            WHERE id = $1
+              AND company_id = $2
+              AND status = 'PROCESSED'
+              AND adjustment_required = TRUE
+
+            RETURNING
+                id,
+                company_id,
+                booking_id,
+                payout_run_id,
+                amount,
+                reason,
+                status,
+                created_by,
+                created_at,
+                adjustment_required
+            `,
+            [
+                refundId,
+                companyId,
+            ],
+        );
 
     return refunds[0] ?? null;
 }

@@ -2,7 +2,7 @@ import { Routes, Route } from "react-router-dom";
 import { Login } from "./pages/auth/login";
 import Admin_dashboard from "./pages/admin/dashboard";
 import Agent_Dashboard from "./pages/agent/dashboard";
-import Finace_Dashboard from "./pages/finace/dashboard";
+import Finace_Dashboard from "./pages/finance/dashboard";
 import Unauthorized from "./pages/Unauthorized";
 // dashboard components
 import UserManagement from "./pages/admin/UserManagement";
@@ -11,22 +11,22 @@ import EditUser from "./pages/admin/edituser";
 import Booking_infomation from "./pages/admin/booking";
 import ViewBookings from "./pages/admin/bookingdetails";
 import ViewBookings_agents from "./pages/agent/bookingdetails";
-import View_Bookings_finace from "./pages/finace/bookingdetails";
+import View_Bookings_finace from "./pages/finance/bookingdetails";
 import EditBooking from "./pages/admin/booking_edit";
-import EditBookingFinance from "./pages/finace/booking_edit";
+import EditBookingFinance from "./pages/finance/booking_edit";
 import CommissionRules from "./pages/admin/commion_rule";
 import PayoutRuns from "./pages/admin/payoutrun";
-import PayoutRuns_finace from "./pages/finace/payoutrun";
-import Booking_Import_finace from "./pages/finace/booking";
+import PayoutRuns_finace from "./pages/finance/payoutrun";
+import Booking_Import_finace from "./pages/finance/booking";
 import Refunds from "./pages/admin/refunds";
-import Refunds_finance from "./pages/finace/refunds";
+import Refunds_finance from "./pages/finance/refunds";
 import CreateRefund from "./pages/admin/create_refund";
 import EditRefund from "./pages/admin/editrefund";
 import AgentPayouts from "./pages/agent/payouts";
 import Report from "./pages/admin/report";
 import AgentReports from "./pages/agent/statement";
 import Settings from "./pages/admin/Settings";
-import ExchangeRates from "./pages/finace/ExchangeRates";
+import ExchangeRates from "./pages/finance/ExchangeRates";
 
 
 function App() {

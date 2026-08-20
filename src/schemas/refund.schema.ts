@@ -1,11 +1,6 @@
 import { z } from "zod";
 
 
-/*
- * ---------------------------------------------------------
- * CREATE REFUND
- * ---------------------------------------------------------
- */
 export const createRefundSchema =
     z.object({
 
@@ -22,7 +17,7 @@ export const createRefundSchema =
                 .trim()
                 .regex(
                     /^\d+(\.\d{1,2})?$/,
-                    "Amount must be a valid positive amount with maximum 2 decimal places.",
+                    "Amount must be a valid amount with maximum 2 decimal places.",
                 )
                 .refine(
                     (value) =>
@@ -47,11 +42,6 @@ export const createRefundSchema =
     });
 
 
-/*
- * ---------------------------------------------------------
- * UPDATE REFUND STATUS
- * ---------------------------------------------------------
- */
 export const updateRefundStatusSchema =
     z.object({
 
@@ -60,6 +50,7 @@ export const updateRefundStatusSchema =
                 "PROCESSED",
                 "CANCELLED",
             ]),
+
     });
 
 
