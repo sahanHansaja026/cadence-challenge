@@ -8,7 +8,7 @@ import {
 
 import {
     createCommissionRule,
-} from "./commissionRule.service";
+} from "../services/commissionRule.service";
 
 import { query } from "../db/client";
 
