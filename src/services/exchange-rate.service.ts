@@ -140,3 +140,77 @@ export async function getExchangeRateForDate(
 
     return result[0] ?? null;
 }
+
+
+export type ExchangeRateCurrency =
+    | "LKR"
+    | "USD";
+
+
+/*
+ * Get the exchange rate from the database.
+ *
+ * LKR:
+ *     1 LKR = 1 LKR
+ *
+ * USD:
+ *     Finds the latest USD rate that was
+ *     effective on or before the booking date.
+ */
+export async function getExchangeRateToLkr(
+    currency: ExchangeRateCurrency,
+    bookingDate: string,
+): Promise<string> {
+
+    /*
+     * LKR does not need conversion.
+     */
+    if (currency === "LKR") {
+        return "1";
+    }
+
+
+    /*
+     * Find the latest applicable exchange rate.
+     */
+    const rows =
+        await query<{
+            rate_to_lkr: string;
+        }>(
+            `
+            SELECT rate_to_lkr
+            FROM exchange_rates
+            WHERE currency = $1
+              AND effective_from <= $2
+            ORDER BY effective_from DESC
+            LIMIT 1
+            `,
+            [
+                currency,
+                bookingDate,
+            ],
+        );
+
+
+    /*
+     * Get the first result safely.
+     */
+    const exchangeRate =
+        rows[0];
+
+
+    /*
+     * No exchange rate exists.
+     */
+    if (!exchangeRate) {
+        throw new Error(
+            `No exchange rate found for ${currency} on ${bookingDate}.`,
+        );
+    }
+
+
+    /*
+     * Exchange rate exists.
+     */
+    return exchangeRate.rate_to_lkr;
+}

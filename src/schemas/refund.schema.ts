@@ -1,18 +1,36 @@
 import { z } from "zod";
 
 
+/*
+ * ---------------------------------------------------------
+ * CREATE REFUND
+ * ---------------------------------------------------------
+ */
 export const createRefundSchema =
     z.object({
 
         bookingId:
             z.string()
-                .min(1, "Booking ID is required."),
+                .trim()
+                .min(
+                    1,
+                    "Booking ID is required.",
+                ),
 
         amount:
             z.string()
+                .trim()
                 .regex(
                     /^\d+(\.\d{1,2})?$/,
                     "Amount must be a valid positive amount with maximum 2 decimal places.",
+                )
+                .refine(
+                    (value) =>
+                        Number(value) > 0,
+                    {
+                        message:
+                            "Refund amount must be greater than zero.",
+                    },
                 ),
 
         reason:
@@ -29,6 +47,11 @@ export const createRefundSchema =
     });
 
 
+/*
+ * ---------------------------------------------------------
+ * UPDATE REFUND STATUS
+ * ---------------------------------------------------------
+ */
 export const updateRefundStatusSchema =
     z.object({
 

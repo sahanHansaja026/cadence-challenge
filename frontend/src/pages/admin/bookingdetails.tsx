@@ -6,17 +6,13 @@ import Button from "../../component/ui/Button";
 import api from "../../services/api";
 import { useNavigate } from "react-router-dom";
 
-type UserRole =
-    | "COMPANY_ADMIN"
-    | "FINANCE"
-    | "AGENT";
-
 interface Booking {
     id: string;
     agent_code: string;
     customer_name: string;
     product_code: string;
     amount: string;
+    currency: string;
     booking_date: string;
     status: string;
     company_id: string;
@@ -39,14 +35,18 @@ function ViewBookings() {
     const [error, setError] =
         useState("");
 
-    // Admin authorization
+    /*
+     * Admin authorization
+     */
     useEffect(() => {
         if (!isLoading) {
             adminAuthorization();
         }
     }, [isLoading]);
 
-    // Get bookings
+    /*
+     * Get bookings
+     */
     useEffect(() => {
         if (!isLoading) {
             fetchBookings();
@@ -61,30 +61,43 @@ function ViewBookings() {
             const token =
                 localStorage.getItem("token");
 
-            const response = await api.get(
-                "/bookings",
-                {
-                    headers: {
-                        Authorization:
-                            `Bearer ${token}`,
+            const response =
+                await api.get(
+                    "/bookings",
+                    {
+                        headers: {
+                            Authorization:
+                                `Bearer ${token}`,
+                        },
                     },
-                }
-            );
+                );
 
             setBookings(
-                response.data.data.bookings
+                response.data.data.bookings,
             );
 
-        } catch (error: any) {
+        } catch (error: unknown) {
+
             console.error(
                 "Fetch bookings error:",
-                error
+                error,
             );
 
+            const axiosError =
+                error as {
+                    response?: {
+                        data?: {
+                            error?: {
+                                message?: string;
+                            };
+                        };
+                    };
+                };
+
             setError(
-                error?.response?.data?.error
+                axiosError.response?.data?.error
                     ?.message ||
-                "Failed to load bookings."
+                "Failed to load bookings.",
             );
 
         } finally {
@@ -92,21 +105,36 @@ function ViewBookings() {
         }
     };
 
+    /*
+     * Edit booking
+     */
     const handleEdit = (
-        bookingId: string
+        bookingId: string,
     ) => {
         navigate(
-            `/editbooking/${bookingId}`
+            `/editbooking/${bookingId}`,
         );
     };
 
-    const handleDelete = async (
-        bookingId: string
+    /*
+     * Reject booking
+     *
+     * This does NOT delete the booking.
+     *
+     * Backend:
+     *
+     * POST /api/bookings/:id/reject
+     *
+     * The booking remains in the database
+     * with status = REJECTED.
+     */
+    const handleReject = async (
+        bookingId: string,
     ) => {
 
         const confirmed =
             window.confirm(
-                "Are you sure you want to delete this booking?"
+                "Are you sure you want to reject this booking?",
             );
 
         if (!confirmed) {
@@ -114,37 +142,65 @@ function ViewBookings() {
         }
 
         try {
+
             const token =
                 localStorage.getItem("token");
 
-            await api.delete(
-                `/bookings/${bookingId}`,
-                {
-                    headers: {
-                        Authorization:
-                            `Bearer ${token}`,
+            const response =
+                await api.post(
+                    `/bookings/${bookingId}/reject`,
+                    {},
+                    {
+                        headers: {
+                            Authorization:
+                                `Bearer ${token}`,
+                        },
                     },
-                }
-            );
+                );
 
+            /*
+             * Get the updated booking returned
+             * by the backend.
+             */
+            const updatedBooking =
+                response.data.data.booking;
+
+            /*
+             * Update only this booking
+             * in the current table.
+             */
             setBookings(
                 (currentBookings) =>
-                    currentBookings.filter(
+                    currentBookings.map(
                         (booking) =>
-                            booking.id !== bookingId
-                    )
+                            booking.id === bookingId
+                                ? updatedBooking
+                                : booking,
+                    ),
             );
 
-        } catch (error: any) {
+        } catch (error: unknown) {
+
             console.error(
-                "Delete booking error:",
-                error
+                "Reject booking error:",
+                error,
             );
+
+            const axiosError =
+                error as {
+                    response?: {
+                        data?: {
+                            error?: {
+                                message?: string;
+                            };
+                        };
+                    };
+                };
 
             setError(
-                error?.response?.data?.error
+                axiosError.response?.data?.error
                     ?.message ||
-                "Failed to delete booking."
+                "Failed to reject booking.",
             );
         }
     };
@@ -170,6 +226,7 @@ function ViewBookings() {
 
                 {/* Header */}
                 <div className="mb-8">
+
                     <h1 className="text-3xl font-bold text-gray-900">
                         Bookings
                     </h1>
@@ -178,6 +235,7 @@ function ViewBookings() {
                         View and manage bookings
                         in your company.
                     </p>
+
                 </div>
 
                 {/* Error */}
@@ -191,14 +249,19 @@ function ViewBookings() {
                 <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
 
                     {loadingBookings ? (
+
                         <div className="p-6 text-sm text-gray-500">
                             Loading bookings...
                         </div>
+
                     ) : bookings.length === 0 ? (
+
                         <div className="p-6 text-sm text-gray-500">
                             No bookings found.
                         </div>
+
                     ) : (
+
                         <div className="overflow-x-auto">
 
                             <table className="w-full text-left">
@@ -214,8 +277,6 @@ function ViewBookings() {
                                         <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-gray-500">
                                             Agent
                                         </th>
-
-                                        
 
                                         <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wide text-gray-500">
                                             Product
@@ -245,6 +306,7 @@ function ViewBookings() {
 
                                     {bookings.map(
                                         (booking) => (
+
                                             <tr
                                                 key={
                                                     booking.id
@@ -264,8 +326,6 @@ function ViewBookings() {
                                                     }
                                                 </td>
 
-                                              
-
                                                 <td className="px-6 py-4 text-sm text-gray-700">
                                                     {
                                                         booking.product_code
@@ -274,6 +334,9 @@ function ViewBookings() {
 
                                                 <td className="px-6 py-4 text-sm font-medium text-gray-900">
                                                     {
+                                                        booking.currency
+                                                    }{" "}
+                                                    {
                                                         booking.amount
                                                     }
                                                 </td>
@@ -281,14 +344,21 @@ function ViewBookings() {
                                                 <td className="px-6 py-4 text-sm text-gray-500">
                                                     {
                                                         new Date(
-                                                            booking.booking_date
+                                                            booking.booking_date,
                                                         ).toLocaleDateString()
                                                     }
                                                 </td>
 
                                                 <td className="px-6 py-4">
 
-                                                    <span className="rounded-md bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
+                                                    <span
+                                                        className={
+                                                            booking.status ===
+                                                                "REJECTED"
+                                                                ? "rounded-md bg-red-100 px-2.5 py-1 text-xs font-medium text-red-700"
+                                                                : "rounded-md bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700"
+                                                        }
+                                                    >
                                                         {
                                                             booking.status
                                                         }
@@ -299,10 +369,13 @@ function ViewBookings() {
                                                 <td className="px-6 py-4">
 
                                                     {user?.role === "AGENT" ? (
+
                                                         <span className="text-sm text-gray-400">
                                                             View only
                                                         </span>
+
                                                     ) : (
+
                                                         <div className="flex gap-2">
 
                                                             <Button
@@ -310,8 +383,12 @@ function ViewBookings() {
                                                                 variant="secondary"
                                                                 onClick={() =>
                                                                     handleEdit(
-                                                                        booking.id
+                                                                        booking.id,
                                                                     )
+                                                                }
+                                                                disabled={
+                                                                    booking.status ===
+                                                                    "REJECTED"
                                                                 }
                                                             >
                                                                 Edit
@@ -321,21 +398,27 @@ function ViewBookings() {
                                                                 type="button"
                                                                 variant="danger"
                                                                 onClick={() =>
-                                                                    handleDelete(
-                                                                        booking.id
+                                                                    handleReject(
+                                                                        booking.id,
                                                                     )
                                                                 }
+                                                                disabled={
+                                                                    booking.status ===
+                                                                    "REJECTED"
+                                                                }
                                                             >
-                                                                Delete
+                                                                Reject
                                                             </Button>
 
                                                         </div>
+
                                                     )}
 
                                                 </td>
 
                                             </tr>
-                                        )
+
+                                        ),
                                     )}
 
                                 </tbody>
@@ -343,11 +426,13 @@ function ViewBookings() {
                             </table>
 
                         </div>
+
                     )}
 
                 </div>
 
             </main>
+
         </div>
     );
 }

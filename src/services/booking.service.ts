@@ -26,17 +26,151 @@ export interface ImportResult {
 
 
 /*
- * Import bookings from CSV rows.
+ * ---------------------------------------------------------
+ * GET EXCHANGE RATE
+ * ---------------------------------------------------------
  *
- * Responsibilities:
+ * Gets the latest exchange rate that was
+ * effective on or before the booking date.
  *
- * 1. Validate CSV values.
- * 2. Verify that the agent exists and is active.
- * 3. Check for duplicate bookings.
- * 4. Insert valid bookings.
+ * Example:
  *
- * companyId comes from the authenticated user's
- * company and is NOT taken from the CSV.
+ * booking date = 2026-03-20
+ *
+ * It will find the most recent rate where:
+ *
+ * effective_from <= 2026-03-20
+ */
+async function getExchangeRate(
+    currency: string,
+    bookingDate: string,
+): Promise<string | null> {
+
+    /*
+     * LKR does not need conversion.
+     */
+    if (currency === "LKR") {
+        return "1";
+    }
+
+
+    const rows =
+        await query<{
+            rate_to_lkr: string;
+        }>(
+            `
+            SELECT rate_to_lkr
+            FROM exchange_rates
+            WHERE currency = $1
+              AND effective_from <= $2
+            ORDER BY effective_from DESC
+            LIMIT 1
+            `,
+            [
+                currency,
+                bookingDate,
+            ],
+        );
+
+
+    /*
+     * IMPORTANT:
+     *
+     * Do NOT use rows[0].rate_to_lkr
+     * directly.
+     *
+     * rows[0] may be undefined.
+     */
+    const rate =
+        rows[0]?.rate_to_lkr;
+
+
+    if (rate === undefined) {
+        return null;
+    }
+
+
+    return rate;
+}
+
+
+/*
+ * ---------------------------------------------------------
+ * CONVERT AMOUNT TO LKR
+ * ---------------------------------------------------------
+ *
+ * Uses Decimal.js-style arithmetic through
+ * PostgreSQL numeric operations.
+ *
+ * We let PostgreSQL perform the multiplication
+ * because NUMERIC is exact.
+ */
+async function convertToLkr(
+    amount: string,
+    currency: string,
+    bookingDate: string,
+): Promise<string | null> {
+
+    /*
+     * Already LKR.
+     */
+    if (currency === "LKR") {
+        return amount;
+    }
+
+
+    /*
+     * Find exchange rate.
+     */
+    const rate =
+        await getExchangeRate(
+            currency,
+            bookingDate,
+        );
+
+
+    if (!rate) {
+        return null;
+    }
+
+
+    /*
+     * PostgreSQL NUMERIC multiplication.
+     *
+     * ROUND(..., 2)
+     *
+     * because bookings.amount is
+     * numeric(14,2).
+     */
+    const rows =
+        await query<{
+            amount_lkr: string;
+        }>(
+            `
+            SELECT ROUND(
+                $1::numeric *
+                $2::numeric,
+                2
+            ) AS amount_lkr
+            `,
+            [
+                amount,
+                rate,
+            ],
+        );
+
+
+    return (
+        rows[0]?.amount_lkr ??
+        null
+    );
+}
+
+
+/*
+ * ---------------------------------------------------------
+ * IMPORT BOOKINGS
+ * ---------------------------------------------------------
  */
 export async function importBookings(
     companyId: string,
@@ -56,10 +190,6 @@ export async function importBookings(
      */
     for (const item of rows) {
 
-        /*
-         * Use the original CSV row number
-         * for error reporting.
-         */
         const rowNumber =
             item.rowNumber;
 
@@ -68,20 +198,14 @@ export async function importBookings(
 
 
         /*
-         * -----------------------------------------------------
+         * -------------------------------------------------
          * CSV VALIDATION
-         * -----------------------------------------------------
-         *
-         * This validation is pure and does not access
-         * the database.
+         * -------------------------------------------------
          */
         const validation =
             validateBookingRow(row);
 
 
-        /*
-         * Reject invalid CSV rows.
-         */
         if (!validation.valid) {
 
             result.rejected++;
@@ -97,32 +221,23 @@ export async function importBookings(
 
 
         /*
-         * -----------------------------------------------------
+         * -------------------------------------------------
          * NORMALIZED VALUES
-         * -----------------------------------------------------
-         *
-         * The validator has already:
-         *
-         * - trimmed values
-         * - converted the date
-         * - validated the amount
-         * - normalized the product code
+         * -------------------------------------------------
          */
         const bookingDate =
             validation.bookingDate!;
 
-        const amount =
-            validation.amount!;
+        const currency =
+            validation.currency!;
+
+        const originalAmount =
+            validation.originalAmount!;
 
         const productCode =
             validation.productCode!;
 
 
-        /*
-         * These values have already been validated,
-         * but we still normalize them here for the
-         * database operation.
-         */
         const externalRef =
             row.external_ref
                 ?.trim() ?? "";
@@ -133,18 +248,11 @@ export async function importBookings(
 
 
         /*
-         * -----------------------------------------------------
+         * -------------------------------------------------
          * AGENT CHECK
-         * -----------------------------------------------------
-         *
-         * The agent must:
-         *
-         * 1. Belong to the authenticated user's company.
-         * 2. Be ACTIVE.
-         *
-         * Agent matching is case-insensitive.
+         * -------------------------------------------------
          */
-        const agent =
+        const agents =
             await query<{
                 id: string;
             }>(
@@ -164,10 +272,7 @@ export async function importBookings(
             );
 
 
-        /*
-         * Agent does not exist or is inactive.
-         */
-        if (agent.length === 0) {
+        if (agents.length === 0) {
 
             result.rejected++;
 
@@ -182,13 +287,9 @@ export async function importBookings(
 
 
         /*
-         * -----------------------------------------------------
+         * -------------------------------------------------
          * DUPLICATE CHECK
-         * -----------------------------------------------------
-         *
-         * A booking reference is unique within a company.
-         *
-         * company_id + external_ref
+         * -------------------------------------------------
          */
         const duplicate =
             await query<{
@@ -208,9 +309,6 @@ export async function importBookings(
             );
 
 
-        /*
-         * Booking already exists.
-         */
         if (duplicate.length > 0) {
 
             result.duplicates++;
@@ -226,13 +324,62 @@ export async function importBookings(
 
 
         /*
-         * -----------------------------------------------------
-         * INSERT BOOKING
-         * -----------------------------------------------------
+         * -------------------------------------------------
+         * CURRENCY CONVERSION
+         * -------------------------------------------------
          *
-         * companyId is taken from the authenticated request.
+         * LKR:
          *
-         * It is NOT taken from the CSV.
+         * 5000
+         * ↓
+         * 5000
+         *
+         *
+         * USD:
+         *
+         * USD100
+         * ↓
+         * exchange rate
+         * ↓
+         * 32000 LKR
+         */
+        const amountLkr =
+            await convertToLkr(
+                originalAmount,
+                currency,
+                bookingDate,
+            );
+
+
+        /*
+         * No exchange rate available.
+         */
+        if (!amountLkr) {
+
+            result.rejected++;
+
+            result.errors.push({
+                row: rowNumber,
+                reason:
+                    `No exchange rate found for ${currency} on or before ${bookingDate}.`,
+            });
+
+            continue;
+        }
+
+
+        /*
+         * -------------------------------------------------
+         * INSERT
+         * -------------------------------------------------
+         *
+         * IMPORTANT:
+         *
+         * amount = LKR amount
+         * currency = LKR
+         *
+         * This keeps the bookings table
+         * normalized to LKR.
          */
         await query(
             `
@@ -268,16 +415,13 @@ export async function importBookings(
 
                 bookingDate,
 
-                amount,
+                amountLkr,
 
                 productCode,
             ],
         );
 
 
-        /*
-         * Successfully inserted.
-         */
         result.accepted++;
     }
 

@@ -7,28 +7,57 @@ export interface BookingCsvRow {
 }
 
 
+export interface ParsedAmount {
+    amount: string;
+    currency: "LKR" | "USD";
+}
+
+
 export interface BookingValidationResult {
     valid: boolean;
     reason?: string;
+
     bookingDate?: string;
+
+    /*
+     * Original currency supplied by CSV.
+     *
+     * If no currency is supplied,
+     * this will be LKR.
+     */
+    currency?: "LKR" | "USD";
+
+    /*
+     * Original numeric amount before
+     * currency conversion.
+     */
+    originalAmount?: string;
+
+    /*
+     * Amount that will be stored in DB.
+     *
+     * USD is converted to LKR before
+     * reaching the database.
+     */
     amount?: string;
+
     productCode?: string;
 }
 
 
 /*
- * Convert DD/MM/YYYY or D/M/YYYY
- * into PostgreSQL YYYY-MM-DD.
+ * ---------------------------------------------------------
+ * DATE
+ * ---------------------------------------------------------
  *
- * Example:
+ * Supports:
  *
  * 03/04/2026
+ * 3/4/2026
+ * 3/04/2026
+ * 03/4/2026
  *
- * means:
- *
- * 3 April 2026
- *
- * and becomes:
+ * Converts to:
  *
  * 2026-04-03
  */
@@ -45,7 +74,6 @@ export function convertDate(
         return null;
     }
 
-
     const day =
         Number(match[1]);
 
@@ -56,9 +84,6 @@ export function convertDate(
         Number(match[3]);
 
 
-    /*
-     * Basic range validation.
-     */
     if (
         month < 1 ||
         month > 12 ||
@@ -69,14 +94,6 @@ export function convertDate(
     }
 
 
-    /*
-     * JavaScript Date validation.
-     *
-     * This catches invalid dates such as:
-     *
-     * 31/02/2026
-     * 31/04/2026
-     */
     const date =
         new Date(
             Date.UTC(
@@ -109,47 +126,224 @@ export function convertDate(
 
 
 /*
- * Validate booking amount.
+ * ---------------------------------------------------------
+ * AMOUNT + CURRENCY PARSER
+ * ---------------------------------------------------------
  *
- * Valid:
+ * Accepted:
  *
  * 5000
- * 5000.5
  * 5000.50
  *
- * Invalid:
+ * USD5000
+ * USD 5000
+ * USD5000.50
+ * USD 5000.50
  *
+ * LKR5000
+ * LKR 5000
+ *
+ * RS5000
+ * RS 5000
+ * Rs5000
+ * Rs 5000
+ * Rs.5000
+ * Rs. 5000
+ *
+ *
+ * If currency is missing:
+ *
+ * 5000
+ *
+ * it is treated as LKR.
+ *
+ *
+ * Rejected:
+ *
+ * EUR500
+ * GBP500
+ * JPY500
+ * Dollars500
+ * 5,000
  * -500
  * 0
  * 5000.123
- * Rs. 5000
- * USD 500
- * 5,000
  */
-export function isValidAmount(
+export function parseAmount(
     value: string,
-): boolean {
+): ParsedAmount | null {
 
     const amount =
         value.trim();
 
-
-    if (
-        !/^\d+(\.\d{1,2})?$/.test(
-            amount,
-        )
-    ) {
-        return false;
+    if (!amount) {
+        return null;
     }
 
 
-    return Number(amount) > 0;
+    /*
+     * -----------------------------------------------------
+     * USD
+     * -----------------------------------------------------
+     *
+     * USD4300
+     * USD 4300
+     * usd4300
+     * usd 4300
+     */
+    let match =
+        /^USD\s*(\d+(?:\.\d{1,2})?)$/i.exec(
+            amount,
+        );
+
+    if (match) {
+
+        const numericAmount =
+            match[1];
+
+        if (numericAmount === undefined) {
+            return null;
+        }
+
+        if (Number(numericAmount) <= 0) {
+            return null;
+        }
+
+        return {
+            amount: numericAmount,
+            currency: "USD",
+        };
+    }
+
+
+    /*
+     * -----------------------------------------------------
+     * LKR
+     * -----------------------------------------------------
+     *
+     * LKR5000
+     * LKR 5000
+     * lkr5000
+     * lkr 5000
+     */
+    match =
+        /^LKR\s*(\d+(?:\.\d{1,2})?)$/i.exec(
+            amount,
+        );
+
+    if (match) {
+
+        const numericAmount =
+            match[1];
+
+        if (numericAmount === undefined) {
+            return null;
+        }
+
+        if (Number(numericAmount) <= 0) {
+            return null;
+        }
+
+        return {
+            amount: numericAmount,
+            currency: "LKR",
+        };
+    }
+
+
+    /*
+     * -----------------------------------------------------
+     * RS / RUPEE ALIASES
+     * -----------------------------------------------------
+     *
+     * RS5000
+     * RS 5000
+     * Rs5000
+     * Rs 5000
+     * Rs.5000
+     * Rs. 5000
+     */
+    match =
+        /^(?:RS|RS\.)\s*(\d+(?:\.\d{1,2})?)$/i.exec(
+            amount,
+        );
+
+    if (match) {
+
+        const numericAmount =
+            match[1];
+
+        if (numericAmount === undefined) {
+            return null;
+        }
+
+        if (Number(numericAmount) <= 0) {
+            return null;
+        }
+
+        return {
+            amount: numericAmount,
+            currency: "LKR",
+        };
+    }
+
+
+    /*
+     * -----------------------------------------------------
+     * NO CURRENCY
+     * -----------------------------------------------------
+     *
+     * 5000
+     * 5000.50
+     *
+     * Default = LKR
+     */
+    match =
+        /^(\d+(?:\.\d{1,2})?)$/.exec(
+            amount,
+        );
+
+    if (match) {
+
+        const numericAmount =
+            match[1];
+
+        if (numericAmount === undefined) {
+            return null;
+        }
+
+        if (Number(numericAmount) <= 0) {
+            return null;
+        }
+
+        return {
+            amount: numericAmount,
+            currency: "LKR",
+        };
+    }
+
+
+    /*
+     * Unsupported currency or invalid amount.
+     *
+     * Examples:
+     *
+     * EUR500
+     * GBP500
+     * JPY500
+     * Dollars500
+     * 5,000
+     * -500
+     * 5000.123
+     */
+    return null;
 }
 
 
 /*
- * Products currently supported
- * by Cadence.
+ * ---------------------------------------------------------
+ * PRODUCTS
+ * ---------------------------------------------------------
  */
 const allowedProducts =
     new Set([
@@ -160,17 +354,17 @@ const allowedProducts =
 
 
 /*
- * Validate one CSV booking row.
+ * ---------------------------------------------------------
+ * VALIDATE BOOKING ROW
+ * ---------------------------------------------------------
  *
- * This function does NOT access PostgreSQL.
+ * This function performs ONLY pure validation.
  *
- * Database checks such as:
+ * It does NOT access PostgreSQL.
  *
- * - agent exists
- * - agent belongs to company
- * - duplicate booking
- *
- * remain inside importBookings().
+ * Currency conversion is performed by
+ * importBookings(), because it requires
+ * exchange_rates from the database.
  */
 export function validateBookingRow(
     row: BookingCsvRow,
@@ -191,7 +385,7 @@ export function validateBookingRow(
             ?.trim() ?? "";
 
 
-    const amount =
+    const amountValue =
         row.amount
             ?.trim() ?? "";
 
@@ -203,7 +397,9 @@ export function validateBookingRow(
 
 
     /*
-     * Validate booking reference.
+     * -----------------------------------------------------
+     * REF
+     * -----------------------------------------------------
      */
     if (!externalRef) {
 
@@ -216,7 +412,9 @@ export function validateBookingRow(
 
 
     /*
-     * Validate agent code.
+     * -----------------------------------------------------
+     * AGENT
+     * -----------------------------------------------------
      */
     if (!agentCode) {
 
@@ -229,7 +427,9 @@ export function validateBookingRow(
 
 
     /*
-     * Validate date.
+     * -----------------------------------------------------
+     * DATE
+     * -----------------------------------------------------
      */
     if (!date) {
 
@@ -256,9 +456,11 @@ export function validateBookingRow(
 
 
     /*
-     * Validate amount.
+     * -----------------------------------------------------
+     * AMOUNT + CURRENCY
+     * -----------------------------------------------------
      */
-    if (!amount) {
+    if (!amountValue) {
 
         return {
             valid: false,
@@ -268,18 +470,24 @@ export function validateBookingRow(
     }
 
 
-    if (!isValidAmount(amount)) {
+    const parsedAmount =
+        parseAmount(amountValue);
+
+
+    if (!parsedAmount) {
 
         return {
             valid: false,
             reason:
-                "Amount must be a positive number with maximum 2 decimal places.",
+                "Amount must be a positive number with maximum 2 decimal places and use LKR, USD, or Rs currency.",
         };
     }
 
 
     /*
-     * Validate product.
+     * -----------------------------------------------------
+     * PRODUCT
+     * -----------------------------------------------------
      */
     if (!productCode) {
 
@@ -306,14 +514,30 @@ export function validateBookingRow(
 
 
     /*
-     * All CSV validation passed.
+     * -----------------------------------------------------
+     * SUCCESS
+     * -----------------------------------------------------
      */
     return {
         valid: true,
 
         bookingDate,
 
-        amount,
+        currency:
+            parsedAmount.currency,
+
+        originalAmount:
+            parsedAmount.amount,
+
+        /*
+         * At this point the amount is still
+         * the original amount.
+         *
+         * importBookings() will convert USD
+         * to LKR using exchange_rates.
+         */
+        amount:
+            parsedAmount.amount,
 
         productCode,
     };
