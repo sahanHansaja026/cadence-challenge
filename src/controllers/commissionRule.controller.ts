@@ -20,8 +20,7 @@ import {
 /*
  * GET /api/commission-rules
  *
- * COMPANY_ADMIN / FINANCE:
- *     View all commission rules for their company.
+ * COMPANY_ADMIN / FINANCE
  */
 export async function getCommissionRulesController(
     req: Request,
@@ -41,7 +40,6 @@ export async function getCommissionRulesController(
     }
 
     try {
-
         const rules =
             await getCommissionRules(
                 req.user.companyId,
@@ -75,8 +73,7 @@ export async function getCommissionRulesController(
 /*
  * GET /api/commission-rules/:id
  *
- * COMPANY_ADMIN / FINANCE:
- *     View one commission rule.
+ * COMPANY_ADMIN / FINANCE
  */
 export async function getCommissionRuleController(
     req: Request,
@@ -98,13 +95,6 @@ export async function getCommissionRuleController(
     const ruleId =
         req.params.id;
 
-    /*
-     * Express can type params as
-     * string | string[].
-     *
-     * Make sure this is actually
-     * a single string.
-     */
     if (
         typeof ruleId !== "string" ||
         !ruleId
@@ -190,7 +180,9 @@ export async function createCommissionRuleController(
     }
 
     /*
-     * Extra authorization protection.
+     * Defense-in-depth authorization.
+     *
+     * Route middleware also protects this endpoint.
      */
     if (
         req.user.role !== "COMPANY_ADMIN"
@@ -279,6 +271,23 @@ export async function createCommissionRuleController(
         if (
             error instanceof Error &&
             error.message ===
+            "INVALID_MIN_AMOUNT"
+        ) {
+            res.status(400).json({
+                error: {
+                    code:
+                        "INVALID_MIN_AMOUNT",
+                    message:
+                        "Minimum amount must be zero or greater.",
+                },
+            });
+
+            return;
+        }
+
+        if (
+            error instanceof Error &&
+            error.message ===
             "INVALID_AMOUNT_RANGE"
         ) {
             res.status(400).json({
@@ -337,7 +346,7 @@ export async function createCommissionRuleController(
                     code:
                         "COMMISSION_RULE_OVERLAP",
                     message:
-                        "Another commission rule overlaps this effective date range.",
+                        "Another commission rule overlaps this effective date and amount range.",
                 },
             });
 
@@ -384,7 +393,7 @@ export async function updateCommissionRuleController(
     }
 
     /*
-     * Extra authorization protection.
+     * Defense-in-depth authorization.
      */
     if (
         req.user.role !== "COMPANY_ADMIN"
@@ -403,9 +412,6 @@ export async function updateCommissionRuleController(
     const ruleId =
         req.params.id;
 
-    /*
-     * Validate route parameter.
-     */
     if (
         typeof ruleId !== "string" ||
         !ruleId
@@ -509,6 +515,23 @@ export async function updateCommissionRuleController(
         if (
             error instanceof Error &&
             error.message ===
+            "INVALID_MIN_AMOUNT"
+        ) {
+            res.status(400).json({
+                error: {
+                    code:
+                        "INVALID_MIN_AMOUNT",
+                    message:
+                        "Minimum amount must be zero or greater.",
+                },
+            });
+
+            return;
+        }
+
+        if (
+            error instanceof Error &&
+            error.message ===
             "INVALID_AMOUNT_RANGE"
         ) {
             res.status(400).json({
@@ -567,7 +590,7 @@ export async function updateCommissionRuleController(
                     code:
                         "COMMISSION_RULE_OVERLAP",
                     message:
-                        "Another commission rule overlaps this effective date range.",
+                        "Another commission rule overlaps this effective date and amount range.",
                 },
             });
 
@@ -614,7 +637,7 @@ export async function deleteCommissionRuleController(
     }
 
     /*
-     * Extra authorization protection.
+     * Defense-in-depth authorization.
      */
     if (
         req.user.role !== "COMPANY_ADMIN"
@@ -633,9 +656,6 @@ export async function deleteCommissionRuleController(
     const ruleId =
         req.params.id;
 
-    /*
-     * Validate route parameter.
-     */
     if (
         typeof ruleId !== "string" ||
         !ruleId

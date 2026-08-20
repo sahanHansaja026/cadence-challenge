@@ -21,74 +21,108 @@ const validRow = {
 
 
 /*
- * ---------------------------------------------------------
+ * =========================================================
  * DATE TESTS
- * ---------------------------------------------------------
+ * =========================================================
  */
 describe("convertDate", () => {
 
     it("converts DD/MM/YYYY", () => {
+
         expect(
             convertDate("03/04/2026"),
         ).toBe("2026-04-03");
+
     });
 
 
     it("accepts single digit day and month", () => {
+
         expect(
             convertDate("3/4/2026"),
         ).toBe("2026-04-03");
+
     });
 
 
-    it("accepts 03/4/2026", () => {
-        expect(
-            convertDate("03/4/2026"),
-        ).toBe("2026-04-03");
-    });
+    it("accepts single digit day", () => {
 
-
-    it("accepts 3/04/2026", () => {
         expect(
             convertDate("3/04/2026"),
         ).toBe("2026-04-03");
+
+    });
+
+
+    it("accepts single digit month", () => {
+
+        expect(
+            convertDate("03/4/2026"),
+        ).toBe("2026-04-03");
+
     });
 
 
     it("rejects impossible dates", () => {
+
         expect(
             convertDate("31/02/2026"),
         ).toBeNull();
+
     });
 
 
     it("rejects invalid date format", () => {
+
         expect(
             convertDate("2026-04-03"),
         ).toBeNull();
+
     });
 
 
     it("rejects invalid month", () => {
+
         expect(
             convertDate("03/13/2026"),
         ).toBeNull();
+
     });
 
 
     it("rejects invalid day", () => {
+
         expect(
             convertDate("32/03/2026"),
         ).toBeNull();
+
+    });
+
+
+    it("rejects empty date", () => {
+
+        expect(
+            convertDate(""),
+        ).toBeNull();
+
+    });
+
+
+    it("accepts leading and trailing spaces", () => {
+
+        expect(
+            convertDate(" 03/04/2026 "),
+        ).toBe("2026-04-03");
+
     });
 
 });
 
 
 /*
- * ---------------------------------------------------------
- * CURRENCY + AMOUNT TESTS
- * ---------------------------------------------------------
+ * =========================================================
+ * CURRENCY + AMOUNT PARSER TESTS
+ * =========================================================
  */
 describe("parseAmount", () => {
 
@@ -146,7 +180,7 @@ describe("parseAmount", () => {
     });
 
 
-    it("identifies lowercase lkr", () => {
+    it("identifies lowercase LKR", () => {
 
         expect(
             parseAmount("lkr5000"),
@@ -158,7 +192,7 @@ describe("parseAmount", () => {
     });
 
 
-    it("identifies lowercase lkr with space", () => {
+    it("identifies lowercase LKR with space", () => {
 
         expect(
             parseAmount("lkr 5000"),
@@ -302,7 +336,7 @@ describe("parseAmount", () => {
     });
 
 
-    it("identifies lowercase usd", () => {
+    it("identifies lowercase USD", () => {
 
         expect(
             parseAmount("usd4300"),
@@ -314,7 +348,7 @@ describe("parseAmount", () => {
     });
 
 
-    it("identifies lowercase usd with space", () => {
+    it("identifies lowercase USD with space", () => {
 
         expect(
             parseAmount("usd 4300"),
@@ -332,6 +366,18 @@ describe("parseAmount", () => {
             parseAmount("USD4300.40"),
         ).toEqual({
             amount: "4300.40",
+            currency: "USD",
+        });
+
+    });
+
+
+    it("identifies USD with one decimal place", () => {
+
+        expect(
+            parseAmount("USD4300.4"),
+        ).toEqual({
+            amount: "4300.4",
             currency: "USD",
         });
 
@@ -398,6 +444,15 @@ describe("parseAmount", () => {
     });
 
 
+    it("rejects decimal comma formatted amount", () => {
+
+        expect(
+            parseAmount("5,000.50"),
+        ).toBeNull();
+
+    });
+
+
     /*
      * -----------------------------------------------------
      * UNSUPPORTED CURRENCIES
@@ -431,7 +486,7 @@ describe("parseAmount", () => {
     });
 
 
-    it("rejects Dollars", () => {
+    it("rejects Dollars word", () => {
 
         expect(
             parseAmount("Dollars5000"),
@@ -457,35 +512,69 @@ describe("parseAmount", () => {
 
     });
 
+
+    it("rejects amount without numeric value", () => {
+
+        expect(
+            parseAmount("USD abc"),
+        ).toBeNull();
+
+    });
+
 });
 
 
 /*
- * ---------------------------------------------------------
+ * =========================================================
  * BOOKING VALIDATION
- * ---------------------------------------------------------
+ * =========================================================
  */
 describe("validateBookingRow", () => {
 
-    it("accepts a valid booking", () => {
+    /*
+     * -----------------------------------------------------
+     * STANDARD LKR BOOKING
+     * -----------------------------------------------------
+     */
+
+    it("accepts a valid LKR booking", () => {
 
         const result =
             validateBookingRow(validRow);
 
+
         expect(result.valid)
             .toBe(true);
+
 
         expect(result.bookingDate)
             .toBe("2026-04-03");
 
-        expect(result.amount)
-            .toBe("5000.00");
 
+        /*
+         * Original amount.
+         */
         expect(result.originalAmount)
             .toBe("5000.00");
 
+
+        /*
+         * Currency supplied by CSV.
+         */
         expect(result.currency)
             .toBe("LKR");
+
+
+        /*
+         * At validation stage amount is
+         * still the original amount.
+         *
+         * Conversion happens in
+         * importBookings().
+         */
+        expect(result.amount)
+            .toBe("5000.00");
+
 
         expect(result.productCode)
             .toBe("TRAVEL");
@@ -499,7 +588,7 @@ describe("validateBookingRow", () => {
      * -----------------------------------------------------
      */
 
-    it("identifies USD booking", () => {
+    it("accepts a USD booking and preserves original amount", () => {
 
         const result =
             validateBookingRow({
@@ -507,22 +596,36 @@ describe("validateBookingRow", () => {
                 amount: "USD4300.40",
             });
 
+
         expect(result.valid)
             .toBe(true);
 
+
+        /*
+         * Original currency.
+         */
         expect(result.currency)
             .toBe("USD");
 
+
+        /*
+         * Original charged amount.
+         */
         expect(result.originalAmount)
             .toBe("4300.40");
 
+
+        /*
+         * No conversion is performed
+         * by validateBookingRow().
+         */
         expect(result.amount)
             .toBe("4300.40");
 
     });
 
 
-    it("identifies lowercase usd booking", () => {
+    it("accepts lowercase USD booking", () => {
 
         const result =
             validateBookingRow({
@@ -530,14 +633,48 @@ describe("validateBookingRow", () => {
                 amount: "usd4300.40",
             });
 
+
         expect(result.valid)
             .toBe(true);
+
 
         expect(result.currency)
             .toBe("USD");
 
+
         expect(result.originalAmount)
             .toBe("4300.40");
+
+
+        expect(result.amount)
+            .toBe("4300.40");
+
+    });
+
+
+    it("accepts USD booking with space", () => {
+
+        const result =
+            validateBookingRow({
+                ...validRow,
+                amount: "USD 7700",
+            });
+
+
+        expect(result.valid)
+            .toBe(true);
+
+
+        expect(result.currency)
+            .toBe("USD");
+
+
+        expect(result.originalAmount)
+            .toBe("7700");
+
+
+        expect(result.amount)
+            .toBe("7700");
 
     });
 
@@ -556,19 +693,26 @@ describe("validateBookingRow", () => {
                 amount: "LKR5000",
             });
 
+
         expect(result.valid)
             .toBe(true);
+
 
         expect(result.currency)
             .toBe("LKR");
 
+
         expect(result.originalAmount)
+            .toBe("5000");
+
+
+        expect(result.amount)
             .toBe("5000");
 
     });
 
 
-    it("identifies lowercase lkr booking", () => {
+    it("identifies lowercase LKR booking", () => {
 
         const result =
             validateBookingRow({
@@ -576,13 +720,20 @@ describe("validateBookingRow", () => {
                 amount: "lkr5000",
             });
 
+
         expect(result.valid)
             .toBe(true);
+
 
         expect(result.currency)
             .toBe("LKR");
 
+
         expect(result.originalAmount)
+            .toBe("5000");
+
+
+        expect(result.amount)
             .toBe("5000");
 
     });
@@ -602,13 +753,20 @@ describe("validateBookingRow", () => {
                 amount: "RS 5000",
             });
 
+
         expect(result.valid)
             .toBe(true);
+
 
         expect(result.currency)
             .toBe("LKR");
 
+
         expect(result.originalAmount)
+            .toBe("5000");
+
+
+        expect(result.amount)
             .toBe("5000");
 
     });
@@ -622,11 +780,21 @@ describe("validateBookingRow", () => {
                 amount: "Rs 5000",
             });
 
+
         expect(result.valid)
             .toBe(true);
 
+
         expect(result.currency)
             .toBe("LKR");
+
+
+        expect(result.originalAmount)
+            .toBe("5000");
+
+
+        expect(result.amount)
+            .toBe("5000");
 
     });
 
@@ -639,13 +807,20 @@ describe("validateBookingRow", () => {
                 amount: "Rs. 5000",
             });
 
+
         expect(result.valid)
             .toBe(true);
+
 
         expect(result.currency)
             .toBe("LKR");
 
+
         expect(result.originalAmount)
+            .toBe("5000");
+
+
+        expect(result.amount)
             .toBe("5000");
 
     });
@@ -665,13 +840,20 @@ describe("validateBookingRow", () => {
                 amount: "22000",
             });
 
+
         expect(result.valid)
             .toBe(true);
+
 
         expect(result.currency)
             .toBe("LKR");
 
+
         expect(result.originalAmount)
+            .toBe("22000");
+
+
+        expect(result.amount)
             .toBe("22000");
 
     });
@@ -685,11 +867,21 @@ describe("validateBookingRow", () => {
                 amount: "18750.65",
             });
 
+
         expect(result.valid)
             .toBe(true);
 
+
         expect(result.currency)
             .toBe("LKR");
+
+
+        expect(result.originalAmount)
+            .toBe("18750.65");
+
+
+        expect(result.amount)
+            .toBe("18750.65");
 
     });
 
@@ -708,8 +900,10 @@ describe("validateBookingRow", () => {
                 amount: "EUR5000",
             });
 
+
         expect(result.valid)
             .toBe(false);
+
 
         expect(result.reason)
             .toContain("Amount must be");
@@ -731,8 +925,10 @@ describe("validateBookingRow", () => {
                 external_ref: "",
             });
 
+
         expect(result.valid)
             .toBe(false);
+
 
         expect(result.reason)
             .toBe("Ref is required.");
@@ -748,8 +944,10 @@ describe("validateBookingRow", () => {
                 agent_code: "",
             });
 
+
         expect(result.valid)
             .toBe(false);
+
 
         expect(result.reason)
             .toBe("Agent Code is required.");
@@ -765,8 +963,13 @@ describe("validateBookingRow", () => {
                 date: "",
             });
 
+
         expect(result.valid)
             .toBe(false);
+
+
+        expect(result.reason)
+            .toBe("Booking Date is required.");
 
     });
 
@@ -779,8 +982,15 @@ describe("validateBookingRow", () => {
                 date: "31/02/2026",
             });
 
+
         expect(result.valid)
             .toBe(false);
+
+
+        expect(result.reason)
+            .toBe(
+                "Date must be a valid date in DD/MM/YYYY format.",
+            );
 
     });
 
@@ -793,8 +1003,10 @@ describe("validateBookingRow", () => {
                 amount: "",
             });
 
+
         expect(result.valid)
             .toBe(false);
+
 
         expect(result.reason)
             .toBe("Amount is required.");
@@ -810,6 +1022,7 @@ describe("validateBookingRow", () => {
                 amount: "0",
             });
 
+
         expect(result.valid)
             .toBe(false);
 
@@ -823,6 +1036,7 @@ describe("validateBookingRow", () => {
                 ...validRow,
                 amount: "-1250",
             });
+
 
         expect(result.valid)
             .toBe(false);
@@ -838,6 +1052,7 @@ describe("validateBookingRow", () => {
                 amount: "7425.955",
             });
 
+
         expect(result.valid)
             .toBe(false);
 
@@ -850,6 +1065,25 @@ describe("validateBookingRow", () => {
      * -----------------------------------------------------
      */
 
+    it("accepts TRAVEL", () => {
+
+        const result =
+            validateBookingRow({
+                ...validRow,
+                product_code: "TRAVEL",
+            });
+
+
+        expect(result.valid)
+            .toBe(true);
+
+
+        expect(result.productCode)
+            .toBe("TRAVEL");
+
+    });
+
+
     it("accepts VISA", () => {
 
         const result =
@@ -858,8 +1092,10 @@ describe("validateBookingRow", () => {
                 product_code: "VISA",
             });
 
+
         expect(result.valid)
             .toBe(true);
+
 
         expect(result.productCode)
             .toBe("VISA");
@@ -875,8 +1111,10 @@ describe("validateBookingRow", () => {
                 product_code: "travel",
             });
 
+
         expect(result.valid)
             .toBe(true);
+
 
         expect(result.productCode)
             .toBe("TRAVEL");
@@ -892,8 +1130,13 @@ describe("validateBookingRow", () => {
                 product_code: "INSURANCE",
             });
 
+
         expect(result.valid)
             .toBe(true);
+
+
+        expect(result.productCode)
+            .toBe("INSURANCE");
 
     });
 
@@ -906,8 +1149,10 @@ describe("validateBookingRow", () => {
                 product_code: "HOTEL",
             });
 
+
         expect(result.valid)
             .toBe(false);
+
 
         expect(result.reason)
             .toBe(
@@ -925,8 +1170,10 @@ describe("validateBookingRow", () => {
                 product_code: "",
             });
 
+
         expect(result.valid)
             .toBe(false);
+
 
         expect(result.reason)
             .toBe("Product is required.");

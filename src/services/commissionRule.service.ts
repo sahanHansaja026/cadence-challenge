@@ -2,9 +2,11 @@ import { randomUUID } from "crypto";
 
 import { query } from "../db/client";
 
+
 export type CommissionRuleType =
     | "TIERED"
     | "PRODUCT_OVERRIDE";
+
 
 export interface CommissionRule {
     id: string;
@@ -20,6 +22,7 @@ export interface CommissionRule {
     created_at: string;
 }
 
+
 export interface CreateCommissionRuleInput {
     name: string;
     ruleType: CommissionRuleType;
@@ -30,6 +33,7 @@ export interface CreateCommissionRuleInput {
     effectiveFrom: string;
     effectiveTo?: string | null;
 }
+
 
 export interface UpdateCommissionRuleInput {
     name?: string;
@@ -42,6 +46,7 @@ export interface UpdateCommissionRuleInput {
     effectiveTo?: string | null;
 }
 
+
 /*
  * Get all commission rules belonging
  * to the authenticated company.
@@ -49,6 +54,7 @@ export interface UpdateCommissionRuleInput {
 export async function getCommissionRules(
     companyId: string,
 ): Promise<CommissionRule[]> {
+
     return await query<CommissionRule>(
         `
         SELECT
@@ -87,6 +93,7 @@ export async function getCommissionRuleById(
     companyId: string,
     ruleId: string,
 ): Promise<CommissionRule | null> {
+
     const rules =
         await query<CommissionRule>(
             `
@@ -118,12 +125,18 @@ export async function getCommissionRuleById(
 
 
 /*
- * Check whether another rule overlaps
- * the supplied date AND amount range.
+ * Check whether another commission rule
+ * overlaps the supplied date and amount range.
  *
- * This allows multiple tiers to use the
- * same effective dates as long as their
- * amount ranges do not overlap.
+ * PRODUCT_OVERRIDE rules are compared against
+ * the same product code.
+ *
+ * TIERED rules are compared against other
+ * TIERED rules.
+ *
+ * PRODUCT_OVERRIDE and TIERED rules can coexist
+ * because PRODUCT_OVERRIDE has higher priority
+ * during commission calculation.
  */
 async function hasOverlappingRule(
     companyId: string,
@@ -136,13 +149,6 @@ async function hasOverlappingRule(
     maxAmount: string | null,
 ): Promise<boolean> {
 
-    /*
-     * PRODUCT_OVERRIDE rules are scoped to
-     * their product code.
-     *
-     * TIERED rules are company-wide and have
-     * product_code = NULL.
-     */
     const rules =
         await query<{ id: string }>(
             `
@@ -151,8 +157,7 @@ async function hasOverlappingRule(
             WHERE company_id = $1
 
               /*
-               * Do not compare a rule with itself
-               * during UPDATE.
+               * Exclude the current rule during UPDATE.
                */
               AND (
                     $2::text IS NULL
@@ -160,12 +165,18 @@ async function hasOverlappingRule(
                   )
 
               /*
-               * Same rule type.
+               * Same commission rule type.
                */
               AND rule_type = $3
 
               /*
                * Same product scope.
+               *
+               * PRODUCT_OVERRIDE:
+               *     same product code.
+               *
+               * TIERED:
+               *     product_code must be NULL.
                */
               AND (
                     product_code = $4
@@ -177,13 +188,6 @@ async function hasOverlappingRule(
 
               /*
                * Effective date ranges overlap.
-               *
-               * Example:
-               *
-               * Existing: 2026-08-01 -> 2026-08-31
-               * New:      2026-08-15 -> 2026-09-15
-               *
-               * These overlap.
                */
               AND effective_from <=
                     COALESCE(
@@ -198,22 +202,6 @@ async function hasOverlappingRule(
 
               /*
                * Amount ranges overlap.
-               *
-               * Existing:
-               * 0 -> 100
-               *
-               * New:
-               * 100.01 -> 500
-               *
-               * These do NOT overlap.
-               *
-               * Existing:
-               * 0 -> 100
-               *
-               * New:
-               * 50 -> 200
-               *
-               * These DO overlap.
                */
               AND min_amount <=
                     COALESCE(
@@ -246,6 +234,10 @@ async function hasOverlappingRule(
 
 /*
  * Create commission rule.
+ *
+ * Authorization is intentionally NOT handled here.
+ * The route/controller determines whether the user
+ * is COMPANY_ADMIN.
  */
 export async function createCommissionRule(
     companyId: string,
@@ -253,7 +245,7 @@ export async function createCommissionRule(
 ): Promise<CommissionRule> {
 
     /*
-     * Product override must have a product.
+     * PRODUCT_OVERRIDE requires a product.
      */
     if (
         input.ruleType === "PRODUCT_OVERRIDE" &&
@@ -264,8 +256,10 @@ export async function createCommissionRule(
         );
     }
 
+
     /*
-     * Tiered rules must not have a product.
+     * TIERED rules are company-wide and therefore
+     * cannot specify a product.
      */
     if (
         input.ruleType === "TIERED" &&
@@ -275,6 +269,7 @@ export async function createCommissionRule(
             "PRODUCT_CODE_NOT_ALLOWED_FOR_TIERED_RULE",
         );
     }
+
 
     /*
      * Validate minimum amount.
@@ -291,6 +286,7 @@ export async function createCommissionRule(
         );
     }
 
+
     /*
      * Validate maximum amount.
      */
@@ -298,6 +294,7 @@ export async function createCommissionRule(
         input.maxAmount !== null &&
         input.maxAmount !== undefined
     ) {
+
         const maxAmount =
             Number(input.maxAmount);
 
@@ -310,6 +307,7 @@ export async function createCommissionRule(
             );
         }
     }
+
 
     /*
      * Validate commission rate.
@@ -327,6 +325,7 @@ export async function createCommissionRule(
         );
     }
 
+
     /*
      * Validate effective dates.
      */
@@ -340,13 +339,15 @@ export async function createCommissionRule(
         );
     }
 
+
     /*
-     * Check date + amount overlap.
+     * Check overlapping rules.
      *
-     * IMPORTANT:
+     * PRODUCT_OVERRIDE and TIERED rules are
+     * intentionally allowed to coexist.
      *
-     * Same effective dates are allowed when
-     * the amount ranges are different.
+     * A PRODUCT_OVERRIDE takes precedence
+     * during commission calculation.
      */
     const overlapping =
         await hasOverlappingRule(
@@ -360,14 +361,17 @@ export async function createCommissionRule(
             input.maxAmount ?? null,
         );
 
+
     if (overlapping) {
         throw new Error(
             "COMMISSION_RULE_OVERLAP",
         );
     }
 
+
     const id =
         `commission_rule_${randomUUID()}`;
+
 
     const rules =
         await query<CommissionRule>(
@@ -423,14 +427,17 @@ export async function createCommissionRule(
             ],
         );
 
+
     const rule =
         rules[0];
+
 
     if (!rule) {
         throw new Error(
             "COMMISSION_RULE_CREATION_FAILED",
         );
     }
+
 
     return rule;
 }
@@ -455,47 +462,57 @@ export async function updateCommissionRule(
             ruleId,
         );
 
+
     if (!existing) {
         return null;
     }
+
 
     const name =
         input.name ??
         existing.name;
 
+
     const ruleType =
         input.ruleType ??
         existing.rule_type;
+
 
     const productCode =
         input.productCode !== undefined
             ? input.productCode
             : existing.product_code;
 
+
     const minAmount =
         input.minAmount ??
         existing.min_amount;
+
 
     const maxAmount =
         input.maxAmount !== undefined
             ? input.maxAmount
             : existing.max_amount;
 
+
     const commissionRate =
         input.commissionRate ??
         existing.commission_rate;
 
+
     const effectiveFrom =
         input.effectiveFrom ??
         existing.effective_from;
+
 
     const effectiveTo =
         input.effectiveTo !== undefined
             ? input.effectiveTo
             : existing.effective_to;
 
+
     /*
-     * Product validation.
+     * PRODUCT_OVERRIDE requires a product.
      */
     if (
         ruleType === "PRODUCT_OVERRIDE" &&
@@ -506,8 +523,9 @@ export async function updateCommissionRule(
         );
     }
 
+
     /*
-     * Tiered rules cannot have a product.
+     * TIERED rules cannot have a product.
      */
     if (
         ruleType === "TIERED" &&
@@ -517,6 +535,7 @@ export async function updateCommissionRule(
             "PRODUCT_CODE_NOT_ALLOWED_FOR_TIERED_RULE",
         );
     }
+
 
     /*
      * Validate minimum amount.
@@ -533,6 +552,7 @@ export async function updateCommissionRule(
         );
     }
 
+
     /*
      * Validate maximum amount.
      */
@@ -540,6 +560,7 @@ export async function updateCommissionRule(
         maxAmount !== null &&
         maxAmount !== undefined
     ) {
+
         const numericMax =
             Number(maxAmount);
 
@@ -552,6 +573,7 @@ export async function updateCommissionRule(
             );
         }
     }
+
 
     /*
      * Validate commission rate.
@@ -569,6 +591,7 @@ export async function updateCommissionRule(
         );
     }
 
+
     /*
      * Validate effective dates.
      */
@@ -581,13 +604,9 @@ export async function updateCommissionRule(
         );
     }
 
+
     /*
-     * Check overlap with OTHER rules.
-     *
-     * The current rule ID is excluded.
-     *
-     * Same dates are allowed if the amount
-     * ranges do not overlap.
+     * Check overlap with other rules.
      */
     const overlapping =
         await hasOverlappingRule(
@@ -601,11 +620,13 @@ export async function updateCommissionRule(
             maxAmount ?? null,
         );
 
+
     if (overlapping) {
         throw new Error(
             "COMMISSION_RULE_OVERLAP",
         );
     }
+
 
     const rules =
         await query<CommissionRule>(
@@ -649,6 +670,7 @@ export async function updateCommissionRule(
             ],
         );
 
+
     return rules[0] ?? null;
 }
 
@@ -674,6 +696,7 @@ export async function deleteCommissionRule(
                 companyId,
             ],
         );
+
 
     return result.length > 0;
 }
