@@ -17,18 +17,17 @@ import {
 } from "../controllers/commissionRule.controller";
 
 
-const router =
-    Router();
+const router = Router();
 
 
 /*
  * GET /api/commission-rules
  *
  * COMPANY_ADMIN:
- *     Can view rules.
+ *     Can view commission rules.
  *
  * FINANCE:
- *     Can view rules.
+ *     Can view commission rules.
  *
  * AGENT:
  *     Cannot access.
@@ -46,6 +45,15 @@ router.get(
 
 /*
  * GET /api/commission-rules/:id
+ *
+ * COMPANY_ADMIN:
+ *     Can view one commission rule.
+ *
+ * FINANCE:
+ *     Can view one commission rule.
+ *
+ * AGENT:
+ *     Cannot access.
  */
 router.get(
     "/:id",
@@ -61,18 +69,18 @@ router.get(
 /*
  * POST /api/commission-rules
  *
- * COMPANY_ADMIN:
- *     Can create.
+ * Only COMPANY_ADMIN can create
+ * commission rules.
  *
- * FINANCE:
- *     Can create.
+ * PRODUCT_OVERRIDE is a commission-rule
+ * type. It does NOT mean an authorization
+ * override.
  */
 router.post(
     "/",
     authenticate,
     requireRole(
         "COMPANY_ADMIN",
-        "FINANCE",
     ),
     createCommissionRuleController,
 );
@@ -81,18 +89,14 @@ router.post(
 /*
  * PATCH /api/commission-rules/:id
  *
- * COMPANY_ADMIN:
- *     Can update.
- *
- * FINANCE:
- *     Can update.
+ * Only COMPANY_ADMIN can update
+ * commission rules.
  */
 router.patch(
     "/:id",
     authenticate,
     requireRole(
         "COMPANY_ADMIN",
-        "FINANCE",
     ),
     updateCommissionRuleController,
 );
@@ -101,7 +105,8 @@ router.patch(
 /*
  * DELETE /api/commission-rules/:id
  *
- * Only COMPANY_ADMIN can delete.
+ * Only COMPANY_ADMIN can delete
+ * commission rules.
  */
 router.delete(
     "/:id",

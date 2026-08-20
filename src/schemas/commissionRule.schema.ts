@@ -1,10 +1,18 @@
 import { z } from "zod";
 
+
+/*
+ * Create commission rule
+ */
 export const createCommissionRuleSchema =
     z.object({
         name: z
             .string()
-            .min(1, "Rule name is required."),
+            .trim()
+            .min(
+                1,
+                "Rule name is required.",
+            ),
 
         ruleType: z.enum([
             "TIERED",
@@ -13,39 +21,63 @@ export const createCommissionRuleSchema =
 
         productCode: z
             .string()
-            .min(1)
+            .trim()
+            .min(
+                1,
+                "Product code cannot be empty.",
+            )
             .optional(),
 
         minAmount: z
             .string()
-            .min(1, "Minimum amount is required."),
+            .trim()
+            .min(
+                1,
+                "Minimum amount is required.",
+            ),
 
         maxAmount: z
             .string()
+            .trim()
             .nullable()
             .optional(),
 
         commissionRate: z
             .string()
-            .min(1, "Commission rate is required."),
+            .trim()
+            .min(
+                1,
+                "Commission rate is required.",
+            ),
 
         effectiveFrom: z
             .string()
-            .min(1, "Effective from date is required."),
+            .trim()
+            .min(
+                1,
+                "Effective from date is required.",
+            ),
 
         effectiveTo: z
             .string()
+            .trim()
             .nullable()
             .optional(),
     });
 
+
+/*
+ * Update commission rule
+ */
 export const updateCommissionRuleSchema =
     createCommissionRuleSchema.partial();
+
 
 export type CreateCommissionRuleInput =
     z.infer<
         typeof createCommissionRuleSchema
     >;
+
 
 export type UpdateCommissionRuleInput =
     z.infer<
