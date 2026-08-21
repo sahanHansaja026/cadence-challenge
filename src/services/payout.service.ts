@@ -1719,48 +1719,11 @@ export async function getPayoutBookings(
 }
 
 
+
 /*
  * =========================================================
  * GET PAYOUTS FOR AUTHENTICATED AGENT
  * =========================================================
- */
-/*
- * ---------------------------------------------------------
- * GET PAYOUTS FOR AUTHENTICATED AGENT
- *
- * Returns:
- * - total commission
- * - product override rate
- * - product override commission
- *
- * The agent is identified from the authenticated user.
- * No agentCode is accepted from the frontend.
- * ---------------------------------------------------------
- */
-/*
- * =========================================================
- * GET PAYOUTS FOR AUTHENTICATED AGENT
- * =========================================================
- *
- * Returns:
- *
- * - normal commission
- * - override rate
- * - override volume
- * - override commission
- * - whether override was actually applied
- *
- * IMPORTANT:
- *
- * A PRODUCT_OVERRIDE is considered applicable only when:
- *
- * 1. Product matches
- * 2. Booking date is within effective period
- * 3. Booking amount >= min_amount
- * 4. Booking amount <= max_amount
- *
- * The frontend does NOT send agent_code.
- * The agent is identified using the authenticated userId.
  */
 export async function getAgentPayouts(
     companyId: string,
@@ -1819,16 +1782,6 @@ export async function getAgentPayouts(
             /*
              * =================================================
              * OVERRIDE VOLUME
-             *
-             * Only count a booking as override volume when:
-             *
-             * 1. Product matches
-             * 2. Date matches
-             * 3. Minimum amount matches
-             * 4. Maximum amount matches
-             *
-             * This MUST use the same rules as the payout
-             * calculation.
              * =================================================
              */
 
@@ -1940,10 +1893,6 @@ export async function getAgentPayouts(
         /*
          * =================================================
          * PRODUCT OVERRIDE RULE
-         *
-         * IMPORTANT:
-         *
-         * We check ALL conditions here.
          * =================================================
          */
 
