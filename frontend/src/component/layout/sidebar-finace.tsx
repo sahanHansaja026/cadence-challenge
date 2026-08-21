@@ -32,7 +32,7 @@ const menuItems = [
     },
     {
         label: "Financial Reports",
-        path: "/finance/reports",
+        path: "/financialreport",
     },
 ];
 

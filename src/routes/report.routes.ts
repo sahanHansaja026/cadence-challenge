@@ -13,6 +13,9 @@ import {
     getCompanyReportSummaryController,
     getAgentReportsController,
     getAgentStatementByCodeController,
+    getAdminFinancialReportController,
+    getFinanceFinancialReportController,
+    getAgentFinancialReportController,
 } from "../controllers/report.controller";
 
 
@@ -21,11 +24,52 @@ const router = Router();
 
 /*
  * =========================================================
- * AGENT
+ * ADMIN FINANCIAL REPORT
  * =========================================================
- *
- * Agent can only see their own statement.
  */
+
+router.get(
+    "/admin/financial",
+    authenticate,
+    requireRole("COMPANY_ADMIN"),
+    getAdminFinancialReportController,
+);
+
+
+/*
+ * =========================================================
+ * FINANCE FINANCIAL REPORT
+ * =========================================================
+ */
+
+router.get(
+    "/finance/financial",
+    authenticate,
+    requireRole("FINANCE"),
+    getFinanceFinancialReportController,
+);
+
+
+/*
+ * =========================================================
+ * AGENT FINANCIAL REPORT
+ * =========================================================
+ */
+
+router.get(
+    "/agent/financial",
+    authenticate,
+    requireRole("AGENT"),
+    getAgentFinancialReportController,
+);
+
+
+/*
+ * =========================================================
+ * AGENT STATEMENT
+ * =========================================================
+ */
+
 router.get(
     "/agent/statement",
     authenticate,
@@ -36,11 +80,12 @@ router.get(
 
 /*
  * =========================================================
- * FINANCE + COMPANY ADMIN
+ * COMPANY SUMMARY
  * =========================================================
  *
- * Company financial summary.
+ * Existing endpoint.
  */
+
 router.get(
     "/summary",
     authenticate,
@@ -54,11 +99,10 @@ router.get(
 
 /*
  * =========================================================
- * FINANCE + COMPANY ADMIN
+ * ALL AGENT REPORTS
  * =========================================================
- *
- * All agents summary.
  */
+
 router.get(
     "/agents",
     authenticate,
@@ -72,11 +116,10 @@ router.get(
 
 /*
  * =========================================================
- * FINANCE + COMPANY ADMIN
+ * SPECIFIC AGENT STATEMENT
  * =========================================================
- *
- * Individual agent statement.
  */
+
 router.get(
     "/agents/:agentCode/statement",
     authenticate,

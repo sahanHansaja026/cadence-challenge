@@ -57,7 +57,7 @@ function Reports() {
 
 
     const {
-        adminAuthorization,
+        financeAuthorization,
     } = useAuthorizationCheck();
 
 
@@ -89,7 +89,7 @@ function Reports() {
 
         if (!isLoading) {
 
-            adminAuthorization();
+            financeAuthorization();
 
             fetchReport();
 

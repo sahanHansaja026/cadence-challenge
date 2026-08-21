@@ -16,6 +16,12 @@ import SidebarAgent from "../../component/layout/sidebar-agent";
 import api from "../../services/api";
 
 
+/*
+ * =========================================================
+ * TYPES
+ * =========================================================
+ */
+
 interface AgentStatement {
 
     payout_run_id: string;
@@ -39,23 +45,16 @@ interface AgentStatement {
     commission_rate: string | number;
 
     commission_amount: string | number;
-
-    /*
-     * PRODUCT OVERRIDE
-     */
-    override_rate: string | number | null;
-
-    override_volume: string | number;
-
-    override_commission_amount: string | number;
-
-    override_applied: boolean;
-
-    created_at?: string;
 }
 
 
-function AgentReports() {
+/*
+ * =========================================================
+ * COMPONENT
+ * =========================================================
+ */
+
+function AgentReport() {
 
     const {
         isLoading,
@@ -86,9 +85,9 @@ function AgentReports() {
 
 
     /*
-     * --------------------------------------------------
-     * AUTHORIZATION
-     * --------------------------------------------------
+     * =========================================================
+     * AGENT AUTHORIZATION
+     * =========================================================
      */
 
     useEffect(() => {
@@ -97,7 +96,22 @@ function AgentReports() {
 
             agentAuthorization();
 
-            fetchStatement();
+        }
+
+    }, [isLoading]);
+
+
+    /*
+     * =========================================================
+     * LOAD AGENT REPORT
+     * =========================================================
+ */
+
+    useEffect(() => {
+
+        if (!isLoading) {
+
+            fetchAgentReport();
 
         }
 
@@ -105,12 +119,12 @@ function AgentReports() {
 
 
     /*
-     * --------------------------------------------------
-     * LOAD AGENT STATEMENT
-     * --------------------------------------------------
+     * =========================================================
+     * FETCH REPORT
+     * =========================================================
      */
 
-    async function fetchStatement() {
+    async function fetchAgentReport() {
 
         try {
 
@@ -126,16 +140,16 @@ function AgentReports() {
 
 
             console.log(
-                "AGENT STATEMENT RESPONSE:",
+                "AGENT REPORT:",
                 response.data,
             );
 
 
-            const statement =
+            const data =
                 response.data?.data?.statement;
 
 
-            if (!Array.isArray(statement)) {
+            if (!data) {
 
                 throw new Error(
                     "Agent statement was not returned by the server.",
@@ -144,9 +158,7 @@ function AgentReports() {
             }
 
 
-            setStatements(
-                statement,
-            );
+            setStatements(data);
 
 
         } catch (err: any) {
@@ -160,8 +172,9 @@ function AgentReports() {
             setError(
                 err?.response?.data?.error?.message ||
                 err?.message ||
-                "Failed to load agent statement.",
+                "Unable to load your report.",
             );
+
 
         } finally {
 
@@ -173,19 +186,17 @@ function AgentReports() {
 
 
     /*
-     * --------------------------------------------------
+     * =========================================================
      * MONEY FORMAT
-     * --------------------------------------------------
+     * =========================================================
      */
 
     function money(
-        value: string | number | undefined | null,
+        value: string | number | undefined,
     ): string {
 
         const amount =
-            Number(
-                value ?? 0,
-            );
+            Number(value ?? 0);
 
 
         if (!Number.isFinite(amount)) {
@@ -207,18 +218,38 @@ function AgentReports() {
 
 
     /*
-     * --------------------------------------------------
+     * =========================================================
      * DATE FORMAT
-     * --------------------------------------------------
+     * =========================================================
      */
 
     function formatDate(
         value: string,
     ): string {
 
-        return new Date(
-            value,
-        ).toLocaleDateString(
+        if (!value) {
+
+            return "-";
+
+        }
+
+
+        const date =
+            new Date(value);
+
+
+        if (
+            Number.isNaN(
+                date.getTime(),
+            )
+        ) {
+
+            return value;
+
+        }
+
+
+        return date.toLocaleDateString(
             "en-GB",
         );
 
@@ -226,9 +257,9 @@ function AgentReports() {
 
 
     /*
-     * --------------------------------------------------
+     * =========================================================
      * SUMMARY CALCULATIONS
-     * --------------------------------------------------
+     * =========================================================
      */
 
     const totalBookings =
@@ -259,10 +290,6 @@ function AgentReports() {
         );
 
 
-    /*
-     * Normal / total commission returned
-     * by the payout service.
-     */
     const totalCommission =
         statements.reduce(
             (
@@ -277,113 +304,156 @@ function AgentReports() {
         );
 
 
-    /*
-     * --------------------------------------------------
-     * OVERRIDE TOTALS
-     * --------------------------------------------------
-     */
-
-    const totalOverrideVolume =
-        statements.reduce(
-            (
-                total,
-                statement,
-            ) =>
-                total +
-                Number(
-                    statement.override_volume ?? 0,
-                ),
-            0,
-        );
-
-
-    const totalOverrideCommission =
-        statements.reduce(
-            (
-                total,
-                statement,
-            ) =>
-                total +
-                Number(
-                    statement.override_commission_amount ?? 0,
-                ),
-            0,
-        );
-
-
-    const overrideCount =
+    const finalisedRuns =
         statements.filter(
             statement =>
-                statement.override_applied === true ||
-                Number(
-                    statement.override_commission_amount ?? 0,
-                ) > 0,
+                statement.status === "FINALISED",
         ).length;
 
 
+    const agentCode =
+        statements[0]?.agent_code ?? "-";
+
+
     /*
-     * --------------------------------------------------
+     * =========================================================
      * LOADING
-     * --------------------------------------------------
+     * =========================================================
      */
 
     if (isLoading) {
 
         return (
+
             <div className="flex min-h-screen items-center justify-center">
 
                 Loading...
 
             </div>
+
         );
 
     }
 
 
     /*
-     * --------------------------------------------------
+     * =========================================================
      * PAGE
-     * --------------------------------------------------
+     * =========================================================
      */
 
     return (
+
         <div className="flex min-h-screen bg-gray-50">
 
-            {/* SIDEBAR */}
+
+            {/* =================================================
+                SIDEBAR
+            ================================================= */}
 
             <SidebarAgent
-                activeItem="Export Statements"
+                activeItem="Reports"
             />
 
 
-            {/* MAIN */}
+            {/* =================================================
+                MAIN CONTENT
+            ================================================= */}
 
             <main className="flex-1 p-8">
 
-                {/* HEADER */}
 
-                <div className="mb-8">
+                {/* =================================================
+                    HEADER
+                ================================================= */}
 
-                    <h1 className="text-3xl font-bold text-gray-900">
-                        Reports & Statements
-                    </h1>
+                <div className="mb-8 flex items-start justify-between">
 
-                    <p className="mt-2 text-gray-500">
-                        View your payout, commission, and product
-                        override statements.
-                    </p>
+                    <div>
+
+                        <h1 className="text-3xl font-bold text-gray-900">
+
+                            My Reports
+
+                        </h1>
+
+
+                        <p className="mt-2 text-gray-500">
+
+                            View your booking, commission,
+                            and payout statement.
+
+                        </p>
+
+                    </div>
+
+
+                    <button
+                        type="button"
+                        onClick={fetchAgentReport}
+                        disabled={loading}
+                        className="rounded-lg bg-gray-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+
+                        {loading
+                            ? "Refreshing..."
+                            : "Refresh"
+                        }
+
+                    </button>
 
                 </div>
 
 
-                {/* LOADING */}
+                {/* =================================================
+                    ERROR
+                ================================================= */}
+
+                {!loading && error && (
+
+                    <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-5">
+
+                        <h2 className="font-semibold text-red-800">
+
+                            Unable to load report
+
+                        </h2>
+
+
+                        <p className="mt-2 text-sm text-red-700">
+
+                            {error}
+
+                        </p>
+
+
+                        <button
+                            type="button"
+                            onClick={fetchAgentReport}
+                            className="mt-4 rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800"
+                        >
+
+                            Try Again
+
+                        </button>
+
+                    </div>
+
+                )}
+
+
+                {/* =================================================
+                    LOADING
+                ================================================= */}
 
                 {loading && (
 
-                    <div className="rounded-xl bg-white p-8 shadow-sm">
+                    <div className="rounded-xl bg-white p-10 text-center shadow-sm">
 
                         <p className="text-gray-500">
-                            Loading statement...
+
+                            Loading your report...
+
                         </p>
 
                     </div>
@@ -391,240 +461,156 @@ function AgentReports() {
                 )}
 
 
-                {/* ERROR */}
-
-                {!loading &&
-                    error && (
-
-                        <div className="rounded-xl border border-red-200 bg-red-50 p-5 text-red-700">
-
-                            {error}
-
-                        </div>
-
-                    )}
-
-
-                {/* DATA */}
+                {/* =================================================
+                    REPORT
+                ================================================= */}
 
                 {!loading &&
                     !error && (
 
                         <>
 
-                            {/* ------------------------------------------------ */}
-                            {/* SUMMARY CARDS */}
-                            {/* ------------------------------------------------ */}
 
-                            <div className="grid grid-cols-1 gap-6 md:grid-cols-5">
+                            {/* =================================================
+                                AGENT INFORMATION
+                            ================================================= */}
 
-                                {/* BOOKINGS */}
+                            <div className="mb-8 rounded-xl bg-white p-6 shadow-sm">
 
-                                <div className="rounded-xl bg-white p-6 shadow-sm">
+                                <p className="text-sm font-medium text-gray-500">
 
-                                    <p className="text-sm font-medium text-gray-500">
-                                        Total Bookings
-                                    </p>
+                                    Agent Code
 
-                                    <p className="mt-3 text-3xl font-bold text-gray-900">
-
-                                        {totalBookings}
-
-                                    </p>
-
-                                </div>
+                                </p>
 
 
-                                {/* VOLUME */}
+                                <p className="mt-2 text-2xl font-bold text-gray-900">
 
-                                <div className="rounded-xl bg-white p-6 shadow-sm">
+                                    {agentCode}
 
-                                    <p className="text-sm font-medium text-gray-500">
-                                        Booking Volume
-                                    </p>
-
-                                    <p className="mt-3 text-2xl font-bold text-gray-900">
-
-                                        LKR{" "}
-
-                                        {money(
-                                            totalVolume,
-                                        )}
-
-                                    </p>
-
-                                </div>
+                                </p>
 
 
-                                {/* TOTAL COMMISSION */}
+                                <p className="mt-2 text-sm text-gray-500">
 
-                                <div className="rounded-xl bg-white p-6 shadow-sm">
+                                    This report contains only your
+                                    own booking and commission data.
 
-                                    <p className="text-sm font-medium text-gray-500">
-                                        Total Commission
-                                    </p>
-
-                                    <p className="mt-3 text-2xl font-bold text-gray-900">
-
-                                        LKR{" "}
-
-                                        {money(
-                                            totalCommission,
-                                        )}
-
-                                    </p>
-
-                                </div>
-
-
-                                {/* OVERRIDE VOLUME */}
-
-                                <div className="rounded-xl border border-purple-200 bg-purple-50 p-6">
-
-                                    <p className="text-sm font-medium text-purple-700">
-                                        Override Volume
-                                    </p>
-
-                                    <p className="mt-3 text-2xl font-bold text-purple-900">
-
-                                        LKR{" "}
-
-                                        {money(
-                                            totalOverrideVolume,
-                                        )}
-
-                                    </p>
-
-                                </div>
-
-
-                                {/* OVERRIDE COMMISSION */}
-
-                                <div className="rounded-xl border border-purple-200 bg-purple-50 p-6">
-
-                                    <p className="text-sm font-medium text-purple-700">
-                                        Override Commission
-                                    </p>
-
-                                    <p className="mt-3 text-2xl font-bold text-purple-900">
-
-                                        LKR{" "}
-
-                                        {money(
-                                            totalOverrideCommission,
-                                        )}
-
-                                    </p>
-
-                                </div>
+                                </p>
 
                             </div>
 
 
-                            {/* ------------------------------------------------ */}
-                            {/* OVERRIDE SUMMARY */}
-                            {/* ------------------------------------------------ */}
+                            {/* =================================================
+                                SUMMARY
+                            ================================================= */}
 
-                            <div className="mt-8 rounded-xl border border-purple-200 bg-purple-50 p-6">
+                            <div className="mb-8">
 
-                                <div className="flex flex-col justify-between gap-4 md:flex-row">
+                                <h2 className="mb-4 text-lg font-semibold text-gray-900">
 
-                                    <div>
+                                    My Summary
 
-                                        <h2 className="text-lg font-semibold text-purple-900">
-                                            Product Override Summary
-                                        </h2>
+                                </h2>
 
-                                        <p className="mt-1 text-sm text-purple-700">
 
-                                            Product override commissions are
-                                            applied instead of the normal
-                                            tiered commission when a booking
-                                            matches the configured rule.
+                                <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+
+
+                                    {/* BOOKINGS */}
+
+                                    <div className="rounded-xl bg-white p-6 shadow-sm">
+
+                                        <p className="text-sm font-medium text-gray-500">
+
+                                            My Bookings
+
+                                        </p>
+
+
+                                        <p className="mt-3 text-3xl font-bold text-gray-900">
+
+                                            {
+                                                totalBookings.toLocaleString(
+                                                    "en-LK",
+                                                )
+                                            }
 
                                         </p>
 
                                     </div>
 
 
-                                    <div className="rounded-lg bg-white px-5 py-3">
+                                    {/* VOLUME */}
 
-                                        <p className="text-xs font-semibold uppercase text-gray-500">
-                                            Runs With Override
-                                        </p>
+                                    <div className="rounded-xl bg-white p-6 shadow-sm">
 
-                                        <p className="mt-1 text-xl font-bold text-purple-900">
+                                        <p className="text-sm font-medium text-gray-500">
 
-                                            {overrideCount}
+                                            Booking Volume
 
                                         </p>
 
-                                    </div>
 
-                                </div>
-
-
-                                <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
-
-                                    <div className="rounded-lg bg-white p-4">
-
-                                        <p className="text-xs font-medium text-gray-500">
-                                            Override Volume
-                                        </p>
-
-                                        <p className="mt-2 text-xl font-bold text-gray-900">
+                                        <p className="mt-3 text-2xl font-bold text-gray-900">
 
                                             LKR{" "}
 
-                                            {money(
-                                                totalOverrideVolume,
-                                            )}
+                                            {
+                                                money(
+                                                    totalVolume,
+                                                )
+                                            }
 
                                         </p>
 
                                     </div>
 
 
-                                    <div className="rounded-lg bg-white p-4">
+                                    {/* COMMISSION */}
 
-                                        <p className="text-xs font-medium text-gray-500">
-                                            Override Commission
+                                    <div className="rounded-xl bg-white p-6 shadow-sm">
+
+                                        <p className="text-sm font-medium text-gray-500">
+
+                                            My Commission
+
                                         </p>
 
-                                        <p className="mt-2 text-xl font-bold text-gray-900">
+
+                                        <p className="mt-3 text-2xl font-bold text-gray-900">
 
                                             LKR{" "}
 
-                                            {money(
-                                                totalOverrideCommission,
-                                            )}
+                                            {
+                                                money(
+                                                    totalCommission,
+                                                )
+                                            }
 
                                         </p>
 
                                     </div>
 
 
-                                    <div className="rounded-lg bg-white p-4">
+                                    {/* FINALISED */}
 
-                                        <p className="text-xs font-medium text-gray-500">
-                                            Override Applied
+                                    <div className="rounded-xl bg-white p-6 shadow-sm">
+
+                                        <p className="text-sm font-medium text-gray-500">
+
+                                            Finalised Runs
+
                                         </p>
 
-                                        <p className="mt-2 text-xl font-bold">
 
-                                            {totalOverrideCommission > 0 ? (
+                                        <p className="mt-3 text-3xl font-bold text-gray-900">
 
-                                                <span className="text-green-600">
-                                                    YES
-                                                </span>
-
-                                            ) : (
-
-                                                <span className="text-gray-500">
-                                                    NO
-                                                </span>
-
-                                            )}
+                                            {
+                                                finalisedRuns.toLocaleString(
+                                                    "en-LK",
+                                                )
+                                            }
 
                                         </p>
 
@@ -635,21 +621,27 @@ function AgentReports() {
                             </div>
 
 
-                            {/* ------------------------------------------------ */}
-                            {/* PAYOUT STATEMENTS */}
-                            {/* ------------------------------------------------ */}
+                            {/* =================================================
+                                STATEMENT
+                            ================================================= */}
 
-                            <div className="mt-8 overflow-hidden rounded-xl bg-white shadow-sm">
+                            <div className="overflow-hidden rounded-xl bg-white shadow-sm">
 
-                                <div className="border-b border-gray-200 p-6">
+
+                                <div className="border-b border-gray-200 px-6 py-5">
 
                                     <h2 className="text-lg font-semibold text-gray-900">
-                                        Payout Statements
+
+                                        My Payout Statement
+
                                     </h2>
 
+
                                     <p className="mt-1 text-sm text-gray-500">
-                                        Your payout history by payout run,
-                                        including product override details.
+
+                                        Your commission and booking
+                                        information by payout run.
+
                                     </p>
 
                                 </div>
@@ -659,13 +651,19 @@ function AgentReports() {
 
                                     <div className="p-10 text-center">
 
-                                        <h3 className="text-lg font-semibold text-gray-900">
-                                            No payout statements
+                                        <h3 className="font-semibold text-gray-900">
+
+                                            No statements available
+
                                         </h3>
 
+
                                         <p className="mt-2 text-sm text-gray-500">
-                                            You do not have any payout
-                                            statements yet.
+
+                                            No payout information has
+                                            been generated for your
+                                            account yet.
+
                                         </p>
 
                                     </div>
@@ -681,35 +679,51 @@ function AgentReports() {
                                                 <tr>
 
                                                     <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+
                                                         Run
+
                                                     </th>
 
+
                                                     <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+
                                                         Period
+
                                                     </th>
 
+
                                                     <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+
                                                         Bookings
+
                                                     </th>
 
-                                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                                                        Gross Volume
-                                                    </th>
 
                                                     <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                                                        Normal Rate
+
+                                                        Volume
+
                                                     </th>
 
-                                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                                                        Override
-                                                    </th>
 
                                                     <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+
+                                                        Commission Rate
+
+                                                    </th>
+
+
+                                                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+
                                                         Commission
+
                                                     </th>
 
+
                                                     <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+
                                                         Status
+
                                                     </th>
 
                                                 </tr>
@@ -722,222 +736,137 @@ function AgentReports() {
                                                 {statements.map(
                                                     (
                                                         statement,
-                                                    ) => {
+                                                    ) => (
 
-                                                        const hasOverride =
-                                                            statement.override_applied === true ||
-                                                            Number(
-                                                                statement.override_commission_amount ?? 0,
-                                                            ) > 0;
-
-
-                                                        return (
-
-                                                            <tr
-                                                                key={
-                                                                    statement.payout_run_id
-                                                                }
-                                                                className="hover:bg-gray-50"
-                                                            >
-
-                                                                {/* RUN */}
-
-                                                                <td className="px-6 py-4">
-
-                                                                    <p className="font-medium text-gray-900">
-
-                                                                        #{statement.run_no}
-
-                                                                    </p>
-
-                                                                    <p className="mt-1 text-xs text-gray-500">
-
-                                                                        {
-                                                                            statement.payout_run_id
-                                                                        }
-
-                                                                    </p>
-
-                                                                </td>
+                                                        <tr
+                                                            key={
+                                                                statement.payout_run_id
+                                                            }
+                                                            className="hover:bg-gray-50"
+                                                        >
 
 
-                                                                {/* PERIOD */}
+                                                            {/* RUN */}
 
-                                                                <td className="px-6 py-4 text-sm text-gray-600">
+                                                            <td className="px-6 py-4">
 
-                                                                    {formatDate(
-                                                                        statement.period_start,
-                                                                    )}
+                                                                <span className="font-medium text-gray-900">
 
-                                                                    {" → "}
-
-                                                                    {formatDate(
-                                                                        statement.period_end,
-                                                                    )}
-
-                                                                </td>
-
-
-                                                                {/* BOOKINGS */}
-
-                                                                <td className="px-6 py-4 text-sm font-medium text-gray-900">
-
+                                                                    #
                                                                     {
-                                                                        statement.booking_count
+                                                                        statement.run_no
                                                                     }
 
-                                                                </td>
+                                                                </span>
+
+                                                            </td>
 
 
-                                                                {/* GROSS */}
+                                                            {/* PERIOD */}
 
-                                                                <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                                                            <td className="px-6 py-4 text-sm text-gray-600">
 
-                                                                    LKR{" "}
+                                                                {
+                                                                    formatDate(
+                                                                        statement.period_start,
+                                                                    )
+                                                                }
 
-                                                                    {money(
+                                                                {" → "}
+
+                                                                {
+                                                                    formatDate(
+                                                                        statement.period_end,
+                                                                    )
+                                                                }
+
+                                                            </td>
+
+
+                                                            {/* BOOKINGS */}
+
+                                                            <td className="px-6 py-4 text-sm font-medium text-gray-900">
+
+                                                                {
+                                                                    Number(
+                                                                        statement.booking_count ?? 0,
+                                                                    ).toLocaleString(
+                                                                        "en-LK",
+                                                                    )
+                                                                }
+
+                                                            </td>
+
+
+                                                            {/* VOLUME */}
+
+                                                            <td className="px-6 py-4 text-sm text-gray-900">
+
+                                                                LKR{" "}
+
+                                                                {
+                                                                    money(
                                                                         statement.gross_volume,
-                                                                    )}
+                                                                    )
+                                                                }
 
-                                                                </td>
+                                                            </td>
 
 
-                                                                {/* NORMAL RATE */}
+                                                            {/* RATE */}
 
-                                                                <td className="px-6 py-4 text-sm text-gray-600">
+                                                            <td className="px-6 py-4 text-sm text-gray-900">
 
-                                                                    {money(
+                                                                {
+                                                                    money(
                                                                         statement.commission_rate,
-                                                                    )}
+                                                                    )
+                                                                }
+                                                                %
 
-                                                                    %
-
-                                                                </td>
-
-
-                                                                {/* OVERRIDE */}
-
-                                                                <td className="px-6 py-4">
-
-                                                                    {hasOverride ? (
-
-                                                                        <div className="min-w-[190px] rounded-lg border border-purple-200 bg-purple-50 p-3">
-
-                                                                            <div className="flex items-center gap-2">
-
-                                                                                <span className="rounded-full bg-purple-100 px-2 py-1 text-xs font-bold text-purple-700">
-
-                                                                                    OVERRIDE
-
-                                                                                </span>
-
-                                                                            </div>
+                                                            </td>
 
 
-                                                                            <p className="mt-2 text-sm font-semibold text-purple-900">
+                                                            {/* COMMISSION */}
 
-                                                                                Rate:{" "}
+                                                            <td className="px-6 py-4 text-sm font-semibold text-gray-900">
 
-                                                                                {money(
-                                                                                    statement.override_rate,
-                                                                                )}
+                                                                LKR{" "}
 
-                                                                                %
+                                                                {
+                                                                    money(
+                                                                        statement.commission_amount,
+                                                                    )
+                                                                }
 
-                                                                            </p>
-
-
-                                                                            <p className="mt-1 text-xs text-purple-700">
-
-                                                                                Volume: LKR{" "}
-
-                                                                                {money(
-                                                                                    statement.override_volume,
-                                                                                )}
-
-                                                                            </p>
+                                                            </td>
 
 
-                                                                            <p className="mt-1 text-xs font-semibold text-purple-800">
+                                                            {/* STATUS */}
 
-                                                                                Commission: LKR{" "}
+                                                            <td className="px-6 py-4">
 
-                                                                                {money(
-                                                                                    statement.override_commission_amount,
-                                                                                )}
+                                                                <span
+                                                                    className={
+                                                                        `rounded-full px-3 py-1 text-xs font-medium ${statement.status ===
+                                                                            "FINALISED"
+                                                                            ? "bg-green-100 text-green-700"
+                                                                            : "bg-yellow-100 text-yellow-700"
+                                                                        }`
+                                                                    }
+                                                                >
 
-                                                                            </p>
+                                                                    {
+                                                                        statement.status
+                                                                    }
 
-                                                                        </div>
+                                                                </span>
 
-                                                                    ) : (
+                                                            </td>
 
-                                                                        <span className="text-sm text-gray-400">
+                                                        </tr>
 
-                                                                            No override
-
-                                                                        </span>
-
-                                                                    )}
-
-                                                                </td>
-
-
-                                                                {/* TOTAL COMMISSION */}
-
-                                                                <td className="px-6 py-4">
-
-                                                                    <p className="text-sm font-semibold text-gray-900">
-
-                                                                        LKR{" "}
-
-                                                                        {money(
-                                                                            statement.commission_amount,
-                                                                        )}
-
-                                                                    </p>
-
-
-                                                                    {hasOverride && (
-
-                                                                        <p className="mt-1 text-xs text-purple-600">
-
-                                                                            Includes override
-
-                                                                        </p>
-
-                                                                    )}
-
-                                                                </td>
-
-
-                                                                {/* STATUS */}
-
-                                                                <td className="px-6 py-4">
-
-                                                                    <span
-                                                                        className={
-                                                                            `rounded-full px-3 py-1 text-xs font-medium ${statement.status ===
-                                                                                "FINALISED"
-                                                                                ? "bg-green-100 text-green-700"
-                                                                                : "bg-yellow-100 text-yellow-700"
-                                                                            }`
-                                                                        }
-                                                                    >
-
-                                                                        {
-                                                                            statement.status
-                                                                        }
-
-                                                                    </span>
-
-                                                                </td>
-
-                                                            </tr>
-
-                                                        );
-
-                                                    },
+                                                    ),
                                                 )}
 
                                             </tbody>
@@ -951,104 +880,29 @@ function AgentReports() {
                             </div>
 
 
-                            {/* ------------------------------------------------ */}
-                            {/* CALCULATION DETAILS */}
-                            {/* ------------------------------------------------ */}
+                            {/* =================================================
+                                INFORMATION
+                            ================================================= */}
 
-                            <div className="mt-8 rounded-xl border border-gray-200 bg-white p-6">
+                            <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-5">
 
-                                <h2 className="text-lg font-semibold text-gray-900">
-                                    Commission Calculation
-                                </h2>
+                                <h3 className="font-semibold text-blue-900">
 
-                                <p className="mt-2 text-sm text-gray-500">
+                                    Agent Report
 
-                                    The commission shown in the statement is
-                                    calculated from the bookings included in
-                                    each payout run.
+                                </h3>
+
+
+                                <p className="mt-2 text-sm leading-6 text-blue-800">
+
+                                    This report shows only your own
+                                    booking, commission, and payout
+                                    information. You cannot view
+                                    another agent's financial data,
+                                    company-wide commission rules,
+                                    or other users' information.
 
                                 </p>
-
-
-                                <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
-
-                                    <div className="rounded-lg bg-gray-50 p-4">
-
-                                        <p className="text-xs font-semibold uppercase text-gray-500">
-                                            Gross Volume
-                                        </p>
-
-                                        <p className="mt-2 font-bold text-gray-900">
-
-                                            LKR{" "}
-
-                                            {money(
-                                                totalVolume,
-                                            )}
-
-                                        </p>
-
-                                    </div>
-
-
-                                    <div className="rounded-lg bg-gray-50 p-4">
-
-                                        <p className="text-xs font-semibold uppercase text-gray-500">
-                                            Normal Commission
-                                        </p>
-
-                                        <p className="mt-2 font-bold text-gray-900">
-
-                                            LKR{" "}
-
-                                            {money(
-                                                totalCommission,
-                                            )}
-
-                                        </p>
-
-                                    </div>
-
-
-                                    <div className="rounded-lg bg-purple-50 p-4">
-
-                                        <p className="text-xs font-semibold uppercase text-purple-700">
-                                            Override Commission
-                                        </p>
-
-                                        <p className="mt-2 font-bold text-purple-900">
-
-                                            LKR{" "}
-
-                                            {money(
-                                                totalOverrideCommission,
-                                            )}
-
-                                        </p>
-
-                                    </div>
-
-                                </div>
-
-
-                                <div className="mt-5 rounded-lg border border-blue-100 bg-blue-50 p-4">
-
-                                    <p className="text-sm leading-6 text-blue-900">
-
-                                        <strong>Override rule:</strong>{" "}
-
-                                        When a booking matches a Product
-                                        Override rule by product, amount
-                                        range, and effective date, the
-                                        override rate is used for that
-                                        booking instead of the normal tiered
-                                        commission rate. The override
-                                        commission is not added on top of the
-                                        normal commission.
-
-                                    </p>
-
-                                </div>
 
                             </div>
 
@@ -1059,9 +913,10 @@ function AgentReports() {
             </main>
 
         </div>
+
     );
 
 }
 
 
-export default AgentReports;
+export default AgentReport;
