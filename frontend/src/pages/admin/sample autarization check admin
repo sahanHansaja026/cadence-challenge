@@ -1,0 +1,48 @@
+import { useEffect } from "react";
+import { useAuth } from "../../context/AuthContext";
+import { useAuthorizationCheck } from "../../authorization/AuthorizationCheck";
+import SidebarAdmin from "../../component/layout/sidebar-admin";
+
+function Booking_infomation() {
+    const { isLoading } = useAuth();
+
+    const { adminAuthorization } =
+        useAuthorizationCheck();
+
+    useEffect(() => {
+        if (!isLoading) {
+            adminAuthorization();
+        }
+    }, [isLoading]);
+
+    if (isLoading) {
+        return (
+            <div className="flex min-h-screen items-center justify-center">
+                Loading...
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex min-h-screen bg-gray-50">
+
+            <SidebarAdmin
+                activeItem="Booking Imports"
+            />
+
+            <main className="flex-1 p-8">
+
+                <h1 className="text-3xl font-bold text-gray-900">
+                    Booking Information
+                </h1>
+
+                <p className="mt-2 text-gray-500">
+                    Manage booking imports here.
+                </p>
+
+            </main>
+        </div>
+    );
+}
+
+export default Booking_infomation;
