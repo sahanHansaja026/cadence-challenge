@@ -42,51 +42,57 @@ export interface UpdateCommissionRuleInput {
     effectiveTo?: string | null;
 }
 
+
 /*
- * Get all commission rules belonging
- * to the authenticated company.
- */
+|--------------------------------------------------------------------------
+| GET ALL COMMISSION RULES
+|--------------------------------------------------------------------------
+*/
+
 export async function getCommissionRules(
     companyId: string,
 ): Promise<CommissionRule[]> {
-    return await query<CommissionRule>(
-        `
-        SELECT
-            id,
-            company_id,
-            name,
-            rule_type,
-            product_code,
-            min_amount,
-            max_amount,
-            commission_rate,
-            effective_from,
-            effective_to,
-            created_at
-        FROM commission_rules
-        WHERE company_id = $1
-        ORDER BY
-            effective_from DESC,
-            min_amount ASC,
-            created_at DESC
-        `,
-        [
-            companyId,
-        ],
-    );
+
+    const rules =
+        await query<CommissionRule>(
+            `
+            SELECT
+                id,
+                company_id,
+                name,
+                rule_type,
+                product_code,
+                min_amount,
+                max_amount,
+                commission_rate,
+                effective_from,
+                effective_to,
+                created_at
+            FROM commission_rules
+            WHERE company_id = $1
+            ORDER BY
+                effective_from DESC,
+                min_amount ASC,
+                created_at DESC
+            `,
+            [companyId],
+        );
+
+    return rules;
 }
 
 
 /*
- * Get one commission rule.
- *
- * Company ID is always included so a user
- * cannot access another company's rule.
- */
+|--------------------------------------------------------------------------
+| GET ONE COMMISSION RULE
+|--------------------------------------------------------------------------
+*/
+
 export async function getCommissionRuleById(
     companyId: string,
     ruleId: string,
 ): Promise<CommissionRule | null> {
+
     const rules =
         await query<CommissionRule>(
             `
@@ -118,13 +124,11 @@ export async function getCommissionRuleById(
 
 
 /*
- * Check whether another rule overlaps
- * the supplied date AND amount range.
- *
- * This allows multiple tiers to use the
- * same effective dates as long as their
- * amount ranges do not overlap.
- */
+|--------------------------------------------------------------------------
+| CHECK OVERLAPPING RULE
+|--------------------------------------------------------------------------
+*/
+
 async function hasOverlappingRule(
     companyId: string,
     ruleId: string | null,
@@ -136,37 +140,21 @@ async function hasOverlappingRule(
     maxAmount: string | null,
 ): Promise<boolean> {
 
-    /*
-     * PRODUCT_OVERRIDE rules are scoped to
-     * their product code.
-     *
-     * TIERED rules are company-wide and have
-     * product_code = NULL.
-     */
-    const rules =
+    const rows =
         await query<{ id: string }>(
             `
             SELECT id
             FROM commission_rules
+
             WHERE company_id = $1
 
-              /*
-               * Do not compare a rule with itself
-               * during UPDATE.
-               */
               AND (
                     $2::text IS NULL
                     OR id <> $2
                   )
 
-              /*
-               * Same rule type.
-               */
               AND rule_type = $3
 
-              /*
-               * Same product scope.
-               */
               AND (
                     product_code = $4
                     OR (
@@ -175,16 +163,6 @@ async function hasOverlappingRule(
                     )
                   )
 
-              /*
-               * Effective date ranges overlap.
-               *
-               * Example:
-               *
-               * Existing: 2026-08-01 -> 2026-08-31
-               * New:      2026-08-15 -> 2026-09-15
-               *
-               * These overlap.
-               */
               AND effective_from <=
                     COALESCE(
                         $6::date,
@@ -196,25 +174,6 @@ async function hasOverlappingRule(
                     '9999-12-31'::date
                   ) >= $5::date
 
-              /*
-               * Amount ranges overlap.
-               *
-               * Existing:
-               * 0 -> 100
-               *
-               * New:
-               * 100.01 -> 500
-               *
-               * These do NOT overlap.
-               *
-               * Existing:
-               * 0 -> 100
-               *
-               * New:
-               * 50 -> 200
-               *
-               * These DO overlap.
-               */
               AND min_amount <=
                     COALESCE(
                         $8::numeric,
@@ -240,21 +199,25 @@ async function hasOverlappingRule(
             ],
         );
 
-    return rules.length > 0;
+    return rows.length > 0;
 }
 
 
 /*
- * Create commission rule.
- */
+|--------------------------------------------------------------------------
+| CREATE COMMISSION RULE
+|--------------------------------------------------------------------------
+*/
+
 export async function createCommissionRule(
     companyId: string,
     input: CreateCommissionRuleInput,
 ): Promise<CommissionRule> {
 
     /*
-     * Product override must have a product.
+     * PRODUCT_OVERRIDE requires product code.
      */
+
     if (
         input.ruleType === "PRODUCT_OVERRIDE" &&
         !input.productCode
@@ -264,9 +227,11 @@ export async function createCommissionRule(
         );
     }
 
+
     /*
-     * Tiered rules must not have a product.
+     * TIERED cannot have product code.
      */
+
     if (
         input.ruleType === "TIERED" &&
         input.productCode
@@ -276,9 +241,11 @@ export async function createCommissionRule(
         );
     }
 
+
     /*
      * Validate minimum amount.
      */
+
     const minAmount =
         Number(input.minAmount);
 
@@ -291,13 +258,17 @@ export async function createCommissionRule(
         );
     }
 
+
     /*
      * Validate maximum amount.
      */
+
     if (
         input.maxAmount !== null &&
-        input.maxAmount !== undefined
+        input.maxAmount !== undefined &&
+        input.maxAmount !== ""
     ) {
+
         const maxAmount =
             Number(input.maxAmount);
 
@@ -311,25 +282,29 @@ export async function createCommissionRule(
         }
     }
 
+
     /*
      * Validate commission rate.
      */
-    const rate =
+
+    const commissionRate =
         Number(input.commissionRate);
 
     if (
-        Number.isNaN(rate) ||
-        rate < 0 ||
-        rate > 100
+        Number.isNaN(commissionRate) ||
+        commissionRate < 0 ||
+        commissionRate > 100
     ) {
         throw new Error(
             "INVALID_COMMISSION_RATE",
         );
     }
 
+
     /*
      * Validate effective dates.
      */
+
     if (
         input.effectiveTo &&
         input.effectiveTo <
@@ -340,14 +315,11 @@ export async function createCommissionRule(
         );
     }
 
+
     /*
-     * Check date + amount overlap.
-     *
-     * IMPORTANT:
-     *
-     * Same effective dates are allowed when
-     * the amount ranges are different.
+     * Check overlapping rule.
      */
+
     const overlapping =
         await hasOverlappingRule(
             companyId,
@@ -366,8 +338,18 @@ export async function createCommissionRule(
         );
     }
 
+
+    /*
+     * Generate ID.
+     */
+
     const id =
         `commission_rule_${randomUUID()}`;
+
+
+    /*
+     * Insert.
+     */
 
     const rules =
         await query<CommissionRule>(
@@ -423,6 +405,7 @@ export async function createCommissionRule(
             ],
         );
 
+
     const rule =
         rules[0];
 
@@ -437,8 +420,11 @@ export async function createCommissionRule(
 
 
 /*
- * Update commission rule.
- */
+|--------------------------------------------------------------------------
+| UPDATE COMMISSION RULE
+|--------------------------------------------------------------------------
+*/
+
 export async function updateCommissionRule(
     companyId: string,
     ruleId: string,
@@ -446,9 +432,9 @@ export async function updateCommissionRule(
 ): Promise<CommissionRule | null> {
 
     /*
-     * Make sure the rule belongs to the
-     * authenticated company.
+     * Get existing rule.
      */
+
     const existing =
         await getCommissionRuleById(
             companyId,
@@ -458,6 +444,12 @@ export async function updateCommissionRule(
     if (!existing) {
         return null;
     }
+
+
+    /*
+     * Merge existing values with
+     * incoming values.
+     */
 
     const name =
         input.name ??
@@ -494,9 +486,11 @@ export async function updateCommissionRule(
             ? input.effectiveTo
             : existing.effective_to;
 
+
     /*
-     * Product validation.
+     * PRODUCT_OVERRIDE requires product.
      */
+
     if (
         ruleType === "PRODUCT_OVERRIDE" &&
         !productCode
@@ -506,9 +500,11 @@ export async function updateCommissionRule(
         );
     }
 
+
     /*
-     * Tiered rules cannot have a product.
+     * TIERED cannot have product.
      */
+
     if (
         ruleType === "TIERED" &&
         productCode
@@ -518,9 +514,11 @@ export async function updateCommissionRule(
         );
     }
 
+
     /*
-     * Validate minimum amount.
+     * Validate minimum.
      */
+
     const numericMin =
         Number(minAmount);
 
@@ -533,13 +531,17 @@ export async function updateCommissionRule(
         );
     }
 
+
     /*
-     * Validate maximum amount.
+     * Validate maximum.
      */
+
     if (
         maxAmount !== null &&
-        maxAmount !== undefined
+        maxAmount !== undefined &&
+        maxAmount !== ""
     ) {
+
         const numericMax =
             Number(maxAmount);
 
@@ -553,25 +555,29 @@ export async function updateCommissionRule(
         }
     }
 
+
     /*
      * Validate commission rate.
      */
-    const rate =
+
+    const numericRate =
         Number(commissionRate);
 
     if (
-        Number.isNaN(rate) ||
-        rate < 0 ||
-        rate > 100
+        Number.isNaN(numericRate) ||
+        numericRate < 0 ||
+        numericRate > 100
     ) {
         throw new Error(
             "INVALID_COMMISSION_RATE",
         );
     }
 
+
     /*
-     * Validate effective dates.
+     * Validate dates.
      */
+
     if (
         effectiveTo &&
         effectiveTo < effectiveFrom
@@ -581,14 +587,11 @@ export async function updateCommissionRule(
         );
     }
 
+
     /*
-     * Check overlap with OTHER rules.
-     *
-     * The current rule ID is excluded.
-     *
-     * Same dates are allowed if the amount
-     * ranges do not overlap.
+     * Check overlap.
      */
+
     const overlapping =
         await hasOverlappingRule(
             companyId,
@@ -607,10 +610,16 @@ export async function updateCommissionRule(
         );
     }
 
+
+    /*
+     * Update.
+     */
+
     const rules =
         await query<CommissionRule>(
             `
             UPDATE commission_rules
+
             SET
                 name = $1,
                 rule_type = $2,
@@ -620,8 +629,10 @@ export async function updateCommissionRule(
                 commission_rate = $6,
                 effective_from = $7,
                 effective_to = $8
+
             WHERE id = $9
               AND company_id = $10
+
             RETURNING
                 id,
                 company_id,
@@ -649,24 +660,30 @@ export async function updateCommissionRule(
             ],
         );
 
+
     return rules[0] ?? null;
 }
 
 
 /*
- * Delete commission rule.
- */
+|--------------------------------------------------------------------------
+| DELETE COMMISSION RULE
+|--------------------------------------------------------------------------
+*/
+
 export async function deleteCommissionRule(
     companyId: string,
     ruleId: string,
 ): Promise<boolean> {
 
-    const result =
+    const rows =
         await query<{ id: string }>(
             `
             DELETE FROM commission_rules
+
             WHERE id = $1
               AND company_id = $2
+
             RETURNING id
             `,
             [
@@ -675,5 +692,5 @@ export async function deleteCommissionRule(
             ],
         );
 
-    return result.length > 0;
+    return rows.length > 0;
 }

@@ -24,11 +24,15 @@ const menuItems = [
     },
     {
         label: "Refunds",
-        path: "/finance/refunds",
+        path: "/refundfinace",
+    },
+    {
+        label: "Exchage rate",
+        path: "/exchagerateinsert",
     },
     {
         label: "Financial Reports",
-        path: "/finance/reports",
+        path: "/financialreport",
     },
 ];
 

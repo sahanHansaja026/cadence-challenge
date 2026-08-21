@@ -16,9 +16,11 @@ import Button from "../../component/ui/Button";
 import SidebarAdmin from "../../component/layout/sidebar-admin";
 import api from "../../services/api";
 
+
 type RuleType =
     | "TIERED"
     | "PRODUCT_OVERRIDE";
+
 
 interface CommissionRule {
     id: string;
@@ -34,6 +36,7 @@ interface CommissionRule {
     created_at: string;
 }
 
+
 interface CommissionRuleForm {
     name: string;
     ruleType: RuleType;
@@ -44,6 +47,7 @@ interface CommissionRuleForm {
     maxAmount: string;
     commissionRate: string;
 }
+
 
 const emptyForm: CommissionRuleForm = {
     name: "",
@@ -56,41 +60,52 @@ const emptyForm: CommissionRuleForm = {
     commissionRate: "",
 };
 
+
 function CommissionRules() {
 
     const {
         isLoading,
     } = useAuth();
 
+
     const {
         adminAuthorization,
     } = useAuthorizationCheck();
 
+
     const [rules, setRules] =
         useState<CommissionRule[]>([]);
+
 
     const [loading, setLoading] =
         useState(true);
 
+
     const [saving, setSaving] =
         useState(false);
+
 
     const [deleting, setDeleting] =
         useState<string | null>(null);
 
+
     const [showForm, setShowForm] =
         useState(false);
 
+
     const [editingId, setEditingId] =
         useState<string | null>(null);
+
 
     const [form, setForm] =
         useState<CommissionRuleForm>(
             emptyForm,
         );
 
+
     const [message, setMessage] =
         useState("");
+
 
     const [error, setError] =
         useState("");
@@ -109,7 +124,7 @@ function CommissionRules() {
 
 
     /*
-     * GET COMMISSION RULES
+     * LOAD COMMISSION RULES
      */
     useEffect(() => {
 
@@ -120,6 +135,9 @@ function CommissionRules() {
     }, [isLoading]);
 
 
+    /*
+     * GET COMMISSION RULES
+     */
     const fetchRules = async () => {
 
         try {
@@ -129,6 +147,7 @@ function CommissionRules() {
 
             const token =
                 localStorage.getItem("token");
+
 
             const response =
                 await api.get(
@@ -141,8 +160,9 @@ function CommissionRules() {
                     },
                 );
 
+
             setRules(
-                response.data.data.rules || [],
+                response.data?.data?.rules || [],
             );
 
         } catch (error: any) {
@@ -152,9 +172,14 @@ function CommissionRules() {
                 error,
             );
 
-            setError(
+
+            const message =
                 error?.response?.data?.error
-                    ?.message ||
+                    ?.message;
+
+
+            setError(
+                message ||
                 "Failed to load commission rules.",
             );
 
@@ -167,7 +192,7 @@ function CommissionRules() {
 
 
     /*
-     * CREATE NEW RULE
+     * OPEN CREATE FORM
      */
     const openCreateForm = () => {
 
@@ -185,13 +210,14 @@ function CommissionRules() {
 
 
     /*
-     * EDIT RULE
+     * OPEN EDIT FORM
      */
     const openEditForm = (
         rule: CommissionRule,
     ) => {
 
         setEditingId(rule.id);
+
 
         setForm({
             name:
@@ -209,8 +235,7 @@ function CommissionRules() {
 
             effectiveTo:
                 rule.effective_to
-                    ? rule.effective_to
-                        .substring(0, 10)
+                    ? rule.effective_to.substring(0, 10)
                     : "",
 
             minAmount:
@@ -223,6 +248,7 @@ function CommissionRules() {
                 rule.commission_rate,
         });
 
+
         setMessage("");
         setError("");
 
@@ -231,7 +257,7 @@ function CommissionRules() {
 
 
     /*
-     * FORM FIELD UPDATE
+     * UPDATE FORM FIELD
      */
     const updateField = (
         field: keyof CommissionRuleForm,
@@ -249,16 +275,40 @@ function CommissionRules() {
 
 
     /*
-     * CREATE / UPDATE
+     * CHANGE RULE TYPE
      */
-    const handleSubmit = async (
-        e: React.FormEvent,
+    const handleRuleTypeChange = (
+        value: RuleType,
     ) => {
 
-        e.preventDefault();
+        setForm(
+            previous => ({
+                ...previous,
 
-        setMessage("");
-        setError("");
+                ruleType:
+                    value,
+
+                /*
+                 * Product code only belongs
+                 * to PRODUCT_OVERRIDE.
+                 *
+                 * When changing back to TIERED,
+                 * remove the product code.
+                 */
+                productCode:
+                    value === "PRODUCT_OVERRIDE"
+                        ? previous.productCode
+                        : "",
+            }),
+        );
+
+    };
+
+
+    /*
+     * VALIDATE FORM
+     */
+    const validateForm = (): boolean => {
 
         if (!form.name.trim()) {
 
@@ -266,8 +316,9 @@ function CommissionRules() {
                 "Rule name is required.",
             );
 
-            return;
+            return false;
         }
+
 
         if (!form.effectiveFrom) {
 
@@ -275,26 +326,23 @@ function CommissionRules() {
                 "Effective from date is required.",
             );
 
-            return;
+            return false;
         }
 
-        if (!form.minAmount) {
+
+        if (
+            form.effectiveTo &&
+            form.effectiveTo <
+            form.effectiveFrom
+        ) {
 
             setError(
-                "Minimum amount is required.",
+                "Effective to date cannot be before effective from date.",
             );
 
-            return;
+            return false;
         }
 
-        if (!form.commissionRate) {
-
-            setError(
-                "Commission rate is required.",
-            );
-
-            return;
-        }
 
         if (
             form.ruleType ===
@@ -306,17 +354,123 @@ function CommissionRules() {
                 "Product code is required for a product override rule.",
             );
 
+            return false;
+        }
+
+
+        if (
+            form.ruleType ===
+            "TIERED" &&
+            form.productCode.trim()
+        ) {
+
+            setError(
+                "Tiered rules cannot have a product code.",
+            );
+
+            return false;
+        }
+
+
+        const min =
+            Number(form.minAmount);
+
+
+        if (
+            form.minAmount === "" ||
+            Number.isNaN(min) ||
+            min < 0
+        ) {
+
+            setError(
+                "Minimum amount must be zero or greater.",
+            );
+
+            return false;
+        }
+
+
+        if (form.maxAmount !== "") {
+
+            const max =
+                Number(form.maxAmount);
+
+
+            if (
+                Number.isNaN(max) ||
+                max < min
+            ) {
+
+                setError(
+                    "Maximum amount must be greater than or equal to minimum amount.",
+                );
+
+                return false;
+            }
+        }
+
+
+        const rate =
+            Number(form.commissionRate);
+
+
+        if (
+            form.commissionRate === "" ||
+            Number.isNaN(rate) ||
+            rate < 0 ||
+            rate > 100
+        ) {
+
+            setError(
+                "Commission rate must be between 0 and 100.",
+            );
+
+            return false;
+        }
+
+
+        return true;
+    };
+
+
+    /*
+     * CREATE / UPDATE COMMISSION RULE
+     */
+    const handleSubmit = async (
+        e: React.FormEvent,
+    ) => {
+
+        e.preventDefault();
+
+        setMessage("");
+        setError("");
+
+
+        if (!validateForm()) {
             return;
         }
+
 
         try {
 
             setSaving(true);
 
+
             const token =
                 localStorage.getItem("token");
 
+
+            /*
+             * IMPORTANT:
+             *
+             * PRODUCT_OVERRIDE
+             * -> productCode is sent.
+             *
+             * TIERED
+             * -> productCode is explicitly null.
+             */
             const data = {
+
                 name:
                     form.name.trim(),
 
@@ -329,7 +483,7 @@ function CommissionRules() {
                         ? form.productCode
                             .trim()
                             .toUpperCase()
-                        : undefined,
+                        : null,
 
                 effectiveFrom:
                     form.effectiveFrom,
@@ -350,6 +504,9 @@ function CommissionRules() {
             };
 
 
+            /*
+             * UPDATE
+             */
             if (editingId) {
 
                 await api.patch(
@@ -363,11 +520,17 @@ function CommissionRules() {
                     },
                 );
 
+
                 setMessage(
                     "Commission rule updated successfully.",
                 );
 
-            } else {
+            }
+
+            /*
+             * CREATE
+             */
+            else {
 
                 await api.post(
                     "/commission-rules",
@@ -380,17 +543,24 @@ function CommissionRules() {
                     },
                 );
 
+
                 setMessage(
                     "Commission rule created successfully.",
                 );
             }
 
+
+            /*
+             * Reset form.
+             */
             setShowForm(false);
+
             setEditingId(null);
 
             setForm({
                 ...emptyForm,
             });
+
 
             await fetchRules();
 
@@ -401,9 +571,13 @@ function CommissionRules() {
                 error,
             );
 
+
+            const backendError =
+                error?.response?.data?.error;
+
+
             setError(
-                error?.response?.data?.error
-                    ?.message ||
+                backendError?.message ||
                 "Failed to save commission rule.",
             );
 
@@ -427,18 +601,23 @@ function CommissionRules() {
                 "Are you sure you want to delete this commission rule?",
             );
 
+
         if (!confirmed) {
             return;
         }
 
+
         try {
 
             setDeleting(ruleId);
+
             setError("");
             setMessage("");
 
+
             const token =
                 localStorage.getItem("token");
+
 
             await api.delete(
                 `/commission-rules/${ruleId}`,
@@ -450,9 +629,11 @@ function CommissionRules() {
                 },
             );
 
+
             setMessage(
                 "Commission rule deleted successfully.",
             );
+
 
             await fetchRules();
 
@@ -462,6 +643,7 @@ function CommissionRules() {
                 "Delete commission rule error:",
                 error,
             );
+
 
             setError(
                 error?.response?.data?.error
@@ -477,6 +659,26 @@ function CommissionRules() {
     };
 
 
+    /*
+     * CLOSE FORM
+     */
+    const closeForm = () => {
+
+        setShowForm(false);
+
+        setEditingId(null);
+
+        setForm({
+            ...emptyForm,
+        });
+
+        setError("");
+    };
+
+
+    /*
+     * LOADING
+     */
     if (isLoading || loading) {
 
         return (
@@ -491,18 +693,18 @@ function CommissionRules() {
     return (
         <div className="flex min-h-screen bg-gray-50">
 
-            {/* Sidebar */}
+            {/* SIDEBAR */}
 
             <SidebarAdmin
                 activeItem="Commission Rules"
             />
 
 
-            {/* Main */}
+            {/* MAIN */}
 
             <main className="flex-1 p-8">
 
-                {/* Header */}
+                {/* HEADER */}
 
                 <div className="mb-8 flex items-center justify-between">
 
@@ -513,7 +715,7 @@ function CommissionRules() {
                         </h1>
 
                         <p className="mt-2 text-sm text-gray-500">
-                            Create, update, and manage commission rules.
+                            Create and manage tiered and product override commission rules.
                         </p>
 
                     </div>
@@ -532,21 +734,29 @@ function CommissionRules() {
                 </div>
 
 
-                {/* Success */}
+                {/* SUCCESS */}
 
                 {message && (
+
                     <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-sm font-medium text-green-700">
+
                         {message}
+
                     </div>
+
                 )}
 
 
-                {/* Error */}
+                {/* ERROR */}
 
                 {error && (
+
                     <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
+
                         {error}
+
                     </div>
+
                 )}
 
 
@@ -572,7 +782,7 @@ function CommissionRules() {
                             className="space-y-5"
                         >
 
-                            {/* Name */}
+                            {/* RULE NAME */}
 
                             <Input
                                 label="Rule Name"
@@ -591,22 +801,24 @@ function CommissionRules() {
                             />
 
 
-                            {/* Rule Type */}
+                            {/* RULE TYPE */}
 
                             <div>
 
                                 <label className="mb-2 block text-sm font-medium text-gray-900">
+
                                     Rule Type
+
                                 </label>
+
 
                                 <select
                                     value={
                                         form.ruleType
                                     }
                                     onChange={(e) =>
-                                        updateField(
-                                            "ruleType",
-                                            e.target.value,
+                                        handleRuleTypeChange(
+                                            e.target.value as RuleType,
                                         )
                                     }
                                     className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-sm"
@@ -622,34 +834,53 @@ function CommissionRules() {
 
                                 </select>
 
+
+                                <p className="mt-1 text-xs text-gray-500">
+
+                                    {form.ruleType ===
+                                        "PRODUCT_OVERRIDE"
+                                        ? "This rule applies to the selected product and takes priority over tiered rules."
+                                        : "This rule applies company-wide based on the booking amount."}
+
+                                </p>
+
                             </div>
 
 
-                            {/* Product */}
+                            {/* PRODUCT CODE */}
 
                             {form.ruleType ===
                                 "PRODUCT_OVERRIDE" && (
 
-                                    <Input
-                                        label="Product Code"
-                                        type="text"
-                                        placeholder="TRAVEL"
-                                        value={
-                                            form.productCode
-                                        }
-                                        required
-                                        onChange={(e) =>
-                                            updateField(
-                                                "productCode",
-                                                e.target.value,
-                                            )
-                                        }
-                                    />
+                                    <div>
+
+                                        <Input
+                                            label="Product Code"
+                                            type="text"
+                                            placeholder="TRAVEL"
+                                            value={
+                                                form.productCode
+                                            }
+                                            required
+                                            onChange={(e) =>
+                                                updateField(
+                                                    "productCode",
+                                                    e.target.value
+                                                        .toUpperCase(),
+                                                )
+                                            }
+                                        />
+
+                                        <p className="mt-1 text-xs text-gray-500">
+                                            Example: TRAVEL, HOTEL, FLIGHT
+                                        </p>
+
+                                    </div>
 
                                 )}
 
 
-                            {/* Effective From */}
+                            {/* EFFECTIVE FROM */}
 
                             <Input
                                 label="Effective From"
@@ -667,7 +898,7 @@ function CommissionRules() {
                             />
 
 
-                            {/* Effective To */}
+                            {/* EFFECTIVE TO */}
 
                             <Input
                                 label="Effective To"
@@ -684,7 +915,12 @@ function CommissionRules() {
                             />
 
 
-                            {/* Min */}
+                            <p className="-mt-3 text-xs text-gray-500">
+                                Leave empty for an open-ended rule.
+                            </p>
+
+
+                            {/* MINIMUM */}
 
                             <Input
                                 label="Minimum Amount"
@@ -704,7 +940,7 @@ function CommissionRules() {
                             />
 
 
-                            {/* Max */}
+                            {/* MAXIMUM */}
 
                             <Input
                                 label="Maximum Amount"
@@ -724,7 +960,12 @@ function CommissionRules() {
                             />
 
 
-                            {/* Rate */}
+                            <p className="-mt-3 text-xs text-gray-500">
+                                Leave empty for no maximum amount.
+                            </p>
+
+
+                            {/* COMMISSION RATE */}
 
                             <Input
                                 label="Commission Rate (%)"
@@ -732,6 +973,7 @@ function CommissionRules() {
                                 min="0"
                                 max="100"
                                 step="0.001"
+                                placeholder="Example: 5"
                                 value={
                                     form.commissionRate
                                 }
@@ -745,7 +987,7 @@ function CommissionRules() {
                             />
 
 
-                            {/* Buttons */}
+                            {/* BUTTONS */}
 
                             <div className="flex gap-3">
 
@@ -767,19 +1009,9 @@ function CommissionRules() {
                                 <Button
                                     type="button"
                                     variant="secondary"
-                                    onClick={() => {
-                                        setShowForm(
-                                            false,
-                                        );
-
-                                        setEditingId(
-                                            null,
-                                        );
-
-                                        setForm({
-                                            ...emptyForm,
-                                        });
-                                    }}
+                                    onClick={
+                                        closeForm
+                                    }
                                 >
                                     Cancel
                                 </Button>
@@ -853,6 +1085,10 @@ function CommissionRules() {
                                         </th>
 
                                         <th className="px-6 py-4">
+                                            Effective To
+                                        </th>
+
+                                        <th className="px-6 py-4">
                                             Actions
                                         </th>
 
@@ -873,56 +1109,119 @@ function CommissionRules() {
                                                 className="hover:bg-gray-50"
                                             >
 
+                                                {/* NAME */}
+
                                                 <td className="px-6 py-4 font-medium text-gray-900">
+
                                                     {
                                                         rule.name
                                                     }
+
                                                 </td>
 
 
+                                                {/* TYPE */}
+
                                                 <td className="px-6 py-4">
-                                                    {
-                                                        rule.rule_type
-                                                    }
+
+                                                    {rule.rule_type ===
+                                                        "PRODUCT_OVERRIDE" ? (
+
+                                                        <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700">
+                                                            Product Override
+                                                        </span>
+
+                                                    ) : (
+
+                                                        <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                                                            Tiered
+                                                        </span>
+
+                                                    )}
+
                                                 </td>
 
 
+                                                {/* PRODUCT */}
+
                                                 <td className="px-6 py-4">
-                                                    {
-                                                        rule.product_code ||
-                                                        "-"
-                                                    }
+
+                                                    {rule.product_code
+                                                        ? (
+                                                            <span className="font-medium text-gray-900">
+                                                                {
+                                                                    rule.product_code
+                                                                }
+                                                            </span>
+                                                        )
+                                                        : (
+                                                            "-"
+                                                        )}
+
                                                 </td>
 
 
+                                                {/* MIN */}
+
                                                 <td className="px-6 py-4">
+
                                                     {
                                                         rule.min_amount
                                                     }
+
                                                 </td>
 
 
+                                                {/* MAX */}
+
                                                 <td className="px-6 py-4">
+
                                                     {
                                                         rule.max_amount ||
                                                         "No limit"
                                                     }
+
                                                 </td>
 
 
+                                                {/* RATE */}
+
                                                 <td className="px-6 py-4 font-medium">
+
                                                     {
                                                         rule.commission_rate
                                                     }%
+
                                                 </td>
 
+
+                                                {/* EFFECTIVE FROM */}
 
                                                 <td className="px-6 py-4">
+
                                                     {
                                                         rule.effective_from
+                                                            .substring(0, 10)
                                                     }
+
                                                 </td>
 
+
+                                                {/* EFFECTIVE TO */}
+
+                                                <td className="px-6 py-4">
+
+                                                    {
+                                                        rule.effective_to
+                                                            ? rule.effective_to
+                                                                .substring(0, 10)
+                                                            : "No expiry"
+                                                    }
+
+                                                </td>
+
+
+                                                {/* ACTIONS */}
 
                                                 <td className="px-6 py-4">
 
@@ -966,7 +1265,8 @@ function CommissionRules() {
 
                                             </tr>
 
-                                        ))}
+                                        ),
+                                    )}
 
                                 </tbody>
 
@@ -983,5 +1283,6 @@ function CommissionRules() {
         </div>
     );
 }
+
 
 export default CommissionRules;

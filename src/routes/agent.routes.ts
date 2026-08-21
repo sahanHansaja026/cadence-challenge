@@ -12,14 +12,43 @@ import {
     getMyAgentController,
     createMyAgentController,
     updateMyAgentController,
+    getAllAgentsController,
 } from "../controllers/agent.controller";
 
-const router =
-    Router();
+const router = Router();
+
+
+/*
+ * =====================================================
+ * ADMIN ROUTES
+ * =====================================================
+ */
+
+
+/*
+ * Get all agents in admin's company
+ *
+ * GET /api/agents
+ */
+router.get(
+    "/",
+    authenticate,
+    requireRole("COMPANY_ADMIN"),
+    getAllAgentsController,
+);
+
+
+/*
+ * =====================================================
+ * AGENT ROUTES
+ * =====================================================
+ */
 
 
 /*
  * Get my agent profile
+ *
+ * GET /api/agents/me
  */
 router.get(
     "/me",
@@ -31,6 +60,8 @@ router.get(
 
 /*
  * Create my agent profile
+ *
+ * POST /api/agents/me
  */
 router.post(
     "/me",
@@ -42,6 +73,8 @@ router.post(
 
 /*
  * Update my agent profile
+ *
+ * PATCH /api/agents/me
  */
 router.patch(
     "/me",

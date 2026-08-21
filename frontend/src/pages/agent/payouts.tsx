@@ -17,16 +17,38 @@ import api from "../../services/api";
 
 
 interface AgentPayout {
+
     payout_run_id: string;
+
     run_no: number;
+
     period_start: string;
+
     period_end: string;
-    payout_status: "DRAFT" | "FINALISED";
+
+    payout_status:
+    | "DRAFT"
+    | "FINALISED";
+
     agent_code: string;
+
     booking_count: number;
+
     gross_volume: string;
+
     commission_rate: string;
+
     commission_amount: string;
+
+    /*
+     * PRODUCT OVERRIDE
+     */
+    override_rate: string | null;
+
+    override_volume: string;
+
+    override_commission_amount: string;
+
     created_at: string;
 }
 
@@ -62,6 +84,12 @@ function AgentPayouts() {
     ] = useState("");
 
 
+    /*
+     * --------------------------------------------------
+     * AUTHORIZATION
+     * --------------------------------------------------
+     */
+
     useEffect(() => {
 
         if (!isLoading) {
@@ -72,6 +100,12 @@ function AgentPayouts() {
 
     }, [isLoading]);
 
+
+    /*
+     * --------------------------------------------------
+     * LOAD PAYOUTS
+     * --------------------------------------------------
+     */
 
     useEffect(() => {
 
@@ -94,15 +128,10 @@ function AgentPayouts() {
 
 
             /*
-             * The Axios interceptor automatically
-             * adds the JWT Authorization header.
-             *
-             * We do NOT send:
-             *
-             * agentCode
-             * userId
-             * companyId
+             * JWT interceptor automatically
+             * sends Authorization header.
              */
+
             const response =
                 await api.get(
                     "/payout-runs/agent/payouts",
@@ -135,6 +164,12 @@ function AgentPayouts() {
     }
 
 
+    /*
+     * --------------------------------------------------
+     * LOADING
+     * --------------------------------------------------
+     */
+
     if (isLoading) {
 
         return (
@@ -147,8 +182,11 @@ function AgentPayouts() {
 
 
     /*
-     * Calculate total commission.
+     * --------------------------------------------------
+     * SUMMARY
+     * --------------------------------------------------
      */
+
     const totalCommission =
         payouts.reduce(
             (
@@ -163,9 +201,6 @@ function AgentPayouts() {
         );
 
 
-    /*
-     * Calculate total gross volume.
-     */
     const totalGrossVolume =
         payouts.reduce(
             (
@@ -180,9 +215,6 @@ function AgentPayouts() {
         );
 
 
-    /*
-     * Calculate total bookings.
-     */
     const totalBookings =
         payouts.reduce(
             (
@@ -197,17 +229,59 @@ function AgentPayouts() {
         );
 
 
+    /*
+     * TOTAL OVERRIDE COMMISSION
+     */
+
+    const totalOverrideCommission =
+        payouts.reduce(
+            (
+                total,
+                payout,
+            ) =>
+                total +
+                Number(
+                    payout.override_commission_amount ||
+                    0,
+                ),
+            0,
+        );
+
+
+    /*
+     * TOTAL OVERRIDE VOLUME
+     */
+
+    const totalOverrideVolume =
+        payouts.reduce(
+            (
+                total,
+                payout,
+            ) =>
+                total +
+                Number(
+                    payout.override_volume ||
+                    0,
+                ),
+            0,
+        );
+
+
     return (
         <div className="flex min-h-screen bg-gray-50">
+
+            {/* SIDEBAR */}
 
             <SidebarAgent
                 activeItem="My Payout Statements"
             />
 
 
+            {/* MAIN */}
+
             <main className="flex-1 p-8">
 
-                {/* Header */}
+                {/* HEADER */}
 
                 <div className="mb-8">
 
@@ -222,7 +296,7 @@ function AgentPayouts() {
                 </div>
 
 
-                {/* Agent Information */}
+                {/* AGENT INFORMATION */}
 
                 <div className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
 
@@ -265,7 +339,7 @@ function AgentPayouts() {
                                 Company
                             </p>
 
-                            <p className="mt-1 font-medium text-blue-900 break-all">
+                            <p className="mt-1 break-all font-medium text-blue-900">
                                 {user?.companyId ?? "Unknown"}
                             </p>
 
@@ -276,7 +350,7 @@ function AgentPayouts() {
                 </div>
 
 
-                {/* Loading */}
+                {/* LOADING */}
 
                 {loading && (
 
@@ -291,20 +365,21 @@ function AgentPayouts() {
                 )}
 
 
-                {/* Error */}
+                {/* ERROR */}
 
-                {!loading && error && (
+                {!loading &&
+                    error && (
 
-                    <div className="rounded-xl border border-red-200 bg-red-50 p-5 text-red-700">
+                        <div className="rounded-xl border border-red-200 bg-red-50 p-5 text-red-700">
 
-                        {error}
+                            {error}
 
-                    </div>
+                        </div>
 
-                )}
+                    )}
 
 
-                {/* No payouts */}
+                {/* EMPTY */}
 
                 {!loading &&
                     !error &&
@@ -325,7 +400,7 @@ function AgentPayouts() {
                     )}
 
 
-                {/* Payouts */}
+                {/* PAYOUT DATA */}
 
                 {!loading &&
                     !error &&
@@ -333,9 +408,11 @@ function AgentPayouts() {
 
                         <>
 
-                            {/* Summary Cards */}
+                            {/* SUMMARY */}
 
-                            <div className="mb-6 grid grid-cols-1 gap-5 md:grid-cols-3">
+                            <div className="mb-6 grid grid-cols-1 gap-5 md:grid-cols-5">
+
+                                {/* TOTAL */}
 
                                 <div className="rounded-xl bg-white p-6 shadow-sm">
 
@@ -344,7 +421,9 @@ function AgentPayouts() {
                                     </p>
 
                                     <p className="mt-2 text-2xl font-bold text-gray-900">
+
                                         LKR{" "}
+
                                         {totalCommission.toLocaleString(
                                             "en-LK",
                                             {
@@ -352,10 +431,13 @@ function AgentPayouts() {
                                                 maximumFractionDigits: 2,
                                             },
                                         )}
+
                                     </p>
 
                                 </div>
 
+
+                                {/* GROSS */}
 
                                 <div className="rounded-xl bg-white p-6 shadow-sm">
 
@@ -364,7 +446,9 @@ function AgentPayouts() {
                                     </p>
 
                                     <p className="mt-2 text-2xl font-bold text-gray-900">
+
                                         LKR{" "}
+
                                         {totalGrossVolume.toLocaleString(
                                             "en-LK",
                                             {
@@ -372,10 +456,13 @@ function AgentPayouts() {
                                                 maximumFractionDigits: 2,
                                             },
                                         )}
+
                                     </p>
 
                                 </div>
 
+
+                                {/* BOOKINGS */}
 
                                 <div className="rounded-xl bg-white p-6 shadow-sm">
 
@@ -389,10 +476,60 @@ function AgentPayouts() {
 
                                 </div>
 
+
+                                {/* OVERRIDE VOLUME */}
+
+                                <div className="rounded-xl border border-purple-200 bg-purple-50 p-6">
+
+                                    <p className="text-sm font-medium text-purple-700">
+                                        Override Volume
+                                    </p>
+
+                                    <p className="mt-2 text-2xl font-bold text-purple-900">
+
+                                        LKR{" "}
+
+                                        {totalOverrideVolume.toLocaleString(
+                                            "en-LK",
+                                            {
+                                                minimumFractionDigits: 2,
+                                                maximumFractionDigits: 2,
+                                            },
+                                        )}
+
+                                    </p>
+
+                                </div>
+
+
+                                {/* OVERRIDE COMMISSION */}
+
+                                <div className="rounded-xl border border-purple-200 bg-purple-50 p-6">
+
+                                    <p className="text-sm font-medium text-purple-700">
+                                        Override Commission
+                                    </p>
+
+                                    <p className="mt-2 text-2xl font-bold text-purple-900">
+
+                                        LKR{" "}
+
+                                        {totalOverrideCommission.toLocaleString(
+                                            "en-LK",
+                                            {
+                                                minimumFractionDigits: 2,
+                                                maximumFractionDigits: 2,
+                                            },
+                                        )}
+
+                                    </p>
+
+                                </div>
+
                             </div>
 
 
-                            {/* Payout Table */}
+                            {/* PAYOUT HISTORY */}
 
                             <div className="overflow-hidden rounded-xl bg-white shadow-sm">
 
@@ -430,7 +567,11 @@ function AgentPayouts() {
                                                 </th>
 
                                                 <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                                                    Rate
+                                                    Normal Rate
+                                                </th>
+
+                                                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                                                    Override
                                                 </th>
 
                                                 <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
@@ -449,116 +590,321 @@ function AgentPayouts() {
                                         <tbody className="divide-y divide-gray-200">
 
                                             {payouts.map(
-                                                (payout) => (
+                                                (payout) => {
 
-                                                    <tr
-                                                        key={`${payout.payout_run_id}-${payout.agent_code}`}
-                                                        className="hover:bg-gray-50"
-                                                    >
-
-                                                        <td className="px-6 py-4">
-
-                                                            <p className="font-medium text-gray-900">
-                                                                #{payout.run_no}
-                                                            </p>
-
-                                                            <p className="mt-1 text-xs text-gray-500">
-                                                                {payout.payout_run_id}
-                                                            </p>
-
-                                                        </td>
+                                                    const hasOverride =
+                                                        Number(
+                                                            payout.override_commission_amount ||
+                                                            0,
+                                                        ) > 0;
 
 
-                                                        <td className="px-6 py-4 text-sm text-gray-600">
+                                                    return (
 
-                                                            {new Date(
-                                                                payout.period_start,
-                                                            ).toLocaleDateString()}
+                                                        <tr
+                                                            key={`${payout.payout_run_id}-${payout.agent_code}`}
+                                                            className="hover:bg-gray-50"
+                                                        >
 
-                                                            {" → "}
+                                                            {/* RUN */}
 
-                                                            {new Date(
-                                                                payout.period_end,
-                                                            ).toLocaleDateString()}
+                                                            <td className="px-6 py-4">
 
-                                                        </td>
+                                                                <p className="font-medium text-gray-900">
+                                                                    #{payout.run_no}
+                                                                </p>
+
+                                                                <p className="mt-1 text-xs text-gray-500">
+                                                                    {
+                                                                        payout.payout_run_id
+                                                                    }
+                                                                </p>
+
+                                                            </td>
 
 
-                                                        <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                                                            {/* PERIOD */}
 
-                                                            {payout.booking_count}
+                                                            <td className="px-6 py-4 text-sm text-gray-600">
 
-                                                        </td>
+                                                                {new Date(
+                                                                    payout.period_start,
+                                                                ).toLocaleDateString()}
+
+                                                                {" → "}
+
+                                                                {new Date(
+                                                                    payout.period_end,
+                                                                ).toLocaleDateString()}
+
+                                                            </td>
 
 
-                                                        <td className="px-6 py-4 text-sm text-gray-900">
+                                                            {/* BOOKINGS */}
 
-                                                            LKR{" "}
+                                                            <td className="px-6 py-4 text-sm font-medium text-gray-900">
 
-                                                            {Number(
-                                                                payout.gross_volume,
-                                                            ).toLocaleString(
-                                                                "en-LK",
                                                                 {
-                                                                    minimumFractionDigits: 2,
-                                                                    maximumFractionDigits: 2,
-                                                                },
-                                                            )}
-
-                                                        </td>
-
-
-                                                        <td className="px-6 py-4 text-sm text-gray-900">
-
-                                                            {Number(
-                                                                payout.commission_rate,
-                                                            ).toFixed(2)}
-                                                            %
-
-                                                        </td>
-
-
-                                                        <td className="px-6 py-4 text-sm font-semibold text-gray-900">
-
-                                                            LKR{" "}
-
-                                                            {Number(
-                                                                payout.commission_amount,
-                                                            ).toLocaleString(
-                                                                "en-LK",
-                                                                {
-                                                                    minimumFractionDigits: 2,
-                                                                    maximumFractionDigits: 2,
-                                                                },
-                                                            )}
-
-                                                        </td>
-
-
-                                                        <td className="px-6 py-4">
-
-                                                            <span
-                                                                className={`rounded-full px-3 py-1 text-xs font-medium ${payout.payout_status ===
-                                                                        "FINALISED"
-                                                                        ? "bg-green-100 text-green-700"
-                                                                        : "bg-yellow-100 text-yellow-700"
-                                                                    }`}
-                                                            >
-                                                                {
-                                                                    payout.payout_status
+                                                                    payout.booking_count
                                                                 }
-                                                            </span>
 
-                                                        </td>
+                                                            </td>
 
-                                                    </tr>
 
-                                                ),
+                                                            {/* GROSS */}
+
+                                                            <td className="px-6 py-4 text-sm text-gray-900">
+
+                                                                LKR{" "}
+
+                                                                {Number(
+                                                                    payout.gross_volume,
+                                                                ).toLocaleString(
+                                                                    "en-LK",
+                                                                    {
+                                                                        minimumFractionDigits: 2,
+                                                                        maximumFractionDigits: 2,
+                                                                    },
+                                                                )}
+
+                                                            </td>
+
+
+                                                            {/* NORMAL RATE */}
+
+                                                            <td className="px-6 py-4 text-sm text-gray-900">
+
+                                                                {Number(
+                                                                    payout.commission_rate,
+                                                                ).toFixed(2)}
+                                                                %
+
+                                                            </td>
+
+
+                                                            {/* OVERRIDE */}
+
+                                                            <td className="px-6 py-4">
+
+                                                                {hasOverride ? (
+
+                                                                    <div className="rounded-lg border border-purple-200 bg-purple-50 p-3">
+
+                                                                        <div className="flex items-center gap-2">
+
+                                                                            <span className="rounded-full bg-purple-100 px-2 py-1 text-xs font-bold text-purple-700">
+
+                                                                                OVERRIDE
+
+                                                                            </span>
+
+                                                                        </div>
+
+
+                                                                        <p className="mt-2 text-sm font-semibold text-purple-900">
+
+                                                                            Rate:{" "}
+
+                                                                            {Number(
+                                                                                payout.override_rate,
+                                                                            ).toFixed(2)}
+                                                                            %
+
+                                                                        </p>
+
+
+                                                                        <p className="mt-1 text-xs text-purple-700">
+
+                                                                            Volume: LKR{" "}
+
+                                                                            {Number(
+                                                                                payout.override_volume,
+                                                                            ).toLocaleString(
+                                                                                "en-LK",
+                                                                                {
+                                                                                    minimumFractionDigits: 2,
+                                                                                    maximumFractionDigits: 2,
+                                                                                },
+                                                                            )}
+
+                                                                        </p>
+
+
+                                                                        <p className="mt-1 text-xs font-semibold text-purple-800">
+
+                                                                            Commission: LKR{" "}
+
+                                                                            {Number(
+                                                                                payout.override_commission_amount,
+                                                                            ).toLocaleString(
+                                                                                "en-LK",
+                                                                                {
+                                                                                    minimumFractionDigits: 2,
+                                                                                    maximumFractionDigits: 2,
+                                                                                },
+                                                                            )}
+
+                                                                        </p>
+
+                                                                    </div>
+
+                                                                ) : (
+
+                                                                    <span className="text-sm text-gray-400">
+                                                                        No override
+                                                                    </span>
+
+                                                                )}
+
+                                                            </td>
+
+
+                                                            {/* TOTAL COMMISSION */}
+
+                                                            <td className="px-6 py-4 text-sm font-semibold text-gray-900">
+
+                                                                LKR{" "}
+
+                                                                {Number(
+                                                                    payout.commission_amount,
+                                                                ).toLocaleString(
+                                                                    "en-LK",
+                                                                    {
+                                                                        minimumFractionDigits: 2,
+                                                                        maximumFractionDigits: 2,
+                                                                    },
+                                                                )}
+
+                                                            </td>
+
+
+                                                            {/* STATUS */}
+
+                                                            <td className="px-6 py-4">
+
+                                                                <span
+                                                                    className={`rounded-full px-3 py-1 text-xs font-medium ${payout.payout_status ===
+                                                                            "FINALISED"
+                                                                            ? "bg-green-100 text-green-700"
+                                                                            : "bg-yellow-100 text-yellow-700"
+                                                                        }`}
+                                                                >
+
+                                                                    {
+                                                                        payout.payout_status
+                                                                    }
+
+                                                                </span>
+
+                                                            </td>
+
+                                                        </tr>
+
+                                                    );
+
+                                                },
                                             )}
 
                                         </tbody>
 
                                     </table>
+
+                                </div>
+
+                            </div>
+
+
+                            {/* PROOF MESSAGE */}
+
+                            <div className="mt-6 rounded-xl border border-purple-200 bg-purple-50 p-5">
+
+                                <h3 className="font-semibold text-purple-900">
+                                    Product Override Calculation
+                                </h3>
+
+                                <p className="mt-2 text-sm text-purple-800">
+
+                                    When a booking matches a Product
+                                    Override commission rule, the
+                                    override percentage is applied
+                                    instead of the normal tiered
+                                    commission for that booking.
+
+                                </p>
+
+                                <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+
+                                    <div className="rounded-lg bg-white p-4">
+
+                                        <p className="text-xs text-gray-500">
+                                            Override Volume
+                                        </p>
+
+                                        <p className="mt-1 font-bold text-gray-900">
+
+                                            LKR{" "}
+
+                                            {totalOverrideVolume.toLocaleString(
+                                                "en-LK",
+                                                {
+                                                    minimumFractionDigits: 2,
+                                                    maximumFractionDigits: 2,
+                                                },
+                                            )}
+
+                                        </p>
+
+                                    </div>
+
+
+                                    <div className="rounded-lg bg-white p-4">
+
+                                        <p className="text-xs text-gray-500">
+                                            Override Commission
+                                        </p>
+
+                                        <p className="mt-1 font-bold text-gray-900">
+
+                                            LKR{" "}
+
+                                            {totalOverrideCommission.toLocaleString(
+                                                "en-LK",
+                                                {
+                                                    minimumFractionDigits: 2,
+                                                    maximumFractionDigits: 2,
+                                                },
+                                            )}
+
+                                        </p>
+
+                                    </div>
+
+
+                                    <div className="rounded-lg bg-white p-4">
+
+                                        <p className="text-xs text-gray-500">
+                                            Override Applied
+                                        </p>
+
+                                        <p className="mt-1 font-bold">
+
+                                            {totalOverrideCommission > 0 ? (
+
+                                                <span className="text-green-600">
+                                                    YES
+                                                </span>
+
+                                            ) : (
+
+                                                <span className="text-gray-500">
+                                                    NO
+                                                </span>
+
+                                            )}
+
+                                        </p>
+
+                                    </div>
 
                                 </div>
 

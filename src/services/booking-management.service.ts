@@ -6,11 +6,38 @@ export type Booking = {
     external_ref: string;
     agent_code: string;
     booking_date: string;
+
+    /*
+     * Final amount used for payout calculations.
+     * This is stored in LKR.
+     */
     amount: string;
+
+    /*
+     * Currency of the final amount.
+     * Normally LKR.
+     */
     currency: string;
+
+    /*
+     * Original amount charged to the customer.
+     */
+    original_amount: string | null;
+
+    /*
+     * Original currency charged to the customer.
+     */
+    original_currency: string | null;
+
+    /*
+     * Exchange rate actually applied.
+     */
+    exchange_rate: string | null;
+
     product_code: string;
     status: string;
 };
+
 
 export type UpdateBookingInput = {
     bookingDate?: string;
@@ -19,6 +46,12 @@ export type UpdateBookingInput = {
     agentCode?: string;
 };
 
+
+/*
+ * =========================================================
+ * GET ALL COMPANY BOOKINGS
+ * =========================================================
+ */
 export async function getCompanyBookings(
     companyId: string,
 ): Promise<Booking[]> {
@@ -34,19 +67,29 @@ export async function getCompanyBookings(
                 booking_date,
                 amount,
                 currency,
+                original_amount,
+                original_currency,
+                exchange_rate,
                 product_code,
                 status
             FROM bookings
             WHERE company_id = $1
             ORDER BY booking_date DESC, created_at DESC
             `,
-            [companyId],
+            [
+                companyId,
+            ],
         );
 
     return bookings;
 }
 
 
+/*
+ * =========================================================
+ * GET ONE COMPANY BOOKING
+ * =========================================================
+ */
 export async function getCompanyBookingById(
     companyId: string,
     bookingId: string,
@@ -63,6 +106,9 @@ export async function getCompanyBookingById(
                 booking_date,
                 amount,
                 currency,
+                original_amount,
+                original_currency,
+                exchange_rate,
                 product_code,
                 status
             FROM bookings
@@ -81,10 +127,12 @@ export async function getCompanyBookingById(
 
 
 /*
- * Agent can only see bookings
- * belonging to their own agent profile.
+ * =========================================================
+ * GET AGENT BOOKINGS
+ * =========================================================
  *
- * agents.user_id must point to users.id.
+ * Agent can only see bookings belonging
+ * to their own agent profile.
  */
 export async function getMyAgentBookings(
     userId: string,
@@ -102,6 +150,9 @@ export async function getMyAgentBookings(
                 b.booking_date,
                 b.amount,
                 b.currency,
+                b.original_amount,
+                b.original_currency,
+                b.exchange_rate,
                 b.product_code,
                 b.status
             FROM bookings b
@@ -124,7 +175,9 @@ export async function getMyAgentBookings(
 
 
 /*
- * Agent can view one of their own bookings.
+ * =========================================================
+ * GET ONE AGENT BOOKING
+ * =========================================================
  */
 export async function getMyAgentBookingById(
     userId: string,
@@ -143,6 +196,9 @@ export async function getMyAgentBookingById(
                 b.booking_date,
                 b.amount,
                 b.currency,
+                b.original_amount,
+                b.original_currency,
+                b.exchange_rate,
                 b.product_code,
                 b.status
             FROM bookings b
@@ -167,10 +223,22 @@ export async function getMyAgentBookingById(
 
 
 /*
- * Update booking.
+ * =========================================================
+ * UPDATE BOOKING
+ * =========================================================
  *
- * Only COMPANY_ADMIN and FINANCE
- * should be allowed to call this service.
+ * COMPANY_ADMIN / FINANCE only.
+ *
+ * IMPORTANT:
+ *
+ * We do NOT change:
+ *
+ * original_amount
+ * original_currency
+ * exchange_rate
+ *
+ * because these represent the original
+ * transaction and its audit trail.
  */
 export async function updateBooking(
     companyId: string,
@@ -187,6 +255,17 @@ export async function updateBooking(
     if (!existing) {
         return null;
     }
+
+
+    /*
+     * Do not allow editing a rejected booking.
+     */
+    if (existing.status === "REJECTED") {
+        throw new Error(
+            "BOOKING_REJECTED",
+        );
+    }
+
 
     const bookingDate =
         input.bookingDate ??
@@ -206,9 +285,9 @@ export async function updateBooking(
 
 
     /*
-     * If agent code is being changed,
-     * make sure that agent exists in
-     * the same company and is active.
+     * =====================================================
+     * AGENT VALIDATION
+     * =====================================================
      */
     if (
         input.agentCode &&
@@ -243,7 +322,13 @@ export async function updateBooking(
 
 
     /*
-     * Update only the editable fields.
+     * =====================================================
+     * UPDATE
+     * =====================================================
+     *
+     * Notice that original_amount,
+     * original_currency and exchange_rate
+     * are NOT changed.
      */
     const updated =
         await query<Booking>(
@@ -264,6 +349,9 @@ export async function updateBooking(
                 booking_date,
                 amount,
                 currency,
+                original_amount,
+                original_currency,
+                exchange_rate,
                 product_code,
                 status
             `,
@@ -282,10 +370,9 @@ export async function updateBooking(
 
 
 /*
- * Reject booking.
- *
- * We do NOT delete the booking.
- * We keep the historical record.
+ * =========================================================
+ * REJECT BOOKING
+ * =========================================================
  */
 export async function rejectBooking(
     companyId: string,
@@ -302,6 +389,15 @@ export async function rejectBooking(
         return null;
     }
 
+
+    /*
+     * Already rejected.
+     */
+    if (existing.status === "REJECTED") {
+        return existing;
+    }
+
+
     const updated =
         await query<Booking>(
             `
@@ -317,6 +413,9 @@ export async function rejectBooking(
                 booking_date,
                 amount,
                 currency,
+                original_amount,
+                original_currency,
+                exchange_rate,
                 product_code,
                 status
             `,

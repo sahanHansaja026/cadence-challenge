@@ -217,3 +217,32 @@ export async function updateMyAgentProfile(
 
     return agent;
 }
+
+/*
+ * Get all agents in the authenticated admin's company
+ */
+export async function getAllAgents(
+    companyId: string,
+): Promise<AgentProfile[]> {
+
+    const rows =
+        await query<AgentProfile>(
+            `
+            SELECT
+                id,
+                user_id,
+                company_id,
+                agent_code,
+                full_name,
+                status,
+                ended_at,
+                created_at
+            FROM agents
+            WHERE company_id = $1
+            ORDER BY full_name ASC
+            `,
+            [companyId],
+        );
+
+    return rows;
+}
