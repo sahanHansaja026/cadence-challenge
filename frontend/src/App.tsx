@@ -27,6 +27,7 @@ import Report from "./pages/admin/report";
 import AgentReports from "./pages/agent/statement";
 import Settings from "./pages/admin/Settings";
 import ExchangeRates from "./pages/finance/ExchangeRates";
+import TeamManagement from "./pages/admin/TeamManagement";
 
 
 function App() {
@@ -61,6 +62,7 @@ function App() {
         <Route path="/reportagent" element={<AgentReports />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/exchagerateinsert" element={<ExchangeRates />} />
+        <Route path="/teammanagement" element={<TeamManagement />} />
       </Routes>
 
 

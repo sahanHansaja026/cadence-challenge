@@ -30,6 +30,15 @@ interface BookingGroup {
     gross_volume: string;
 }
 
+interface BookingRecord {
+    id: string;
+    agent_code: string;
+    product_code: string;
+    booking_date: string;
+    amount: string;
+    currency: string;
+}
+
 interface CommissionRule {
     id: string;
     rule_type: "TIERED" | "PRODUCT_OVERRIDE";
@@ -40,42 +49,125 @@ interface CommissionRule {
 }
 
 /*
- * ---------------------------------------------------------
- * TIERED COMMISSION
- * ---------------------------------------------------------
+ * =========================================================
+ * HELPERS
+ * =========================================================
  */
 
+/**
+ * Convert a value to a number safely.
+ */
+function toNumber(value: string | number | null | undefined): number {
+    const number = Number(value);
+
+    if (!Number.isFinite(number)) {
+        return 0;
+    }
+
+    return number;
+}
+
+
+/**
+ * Round monetary values to 2 decimal places.
+ */
+function roundMoney(value: number): number {
+    return Number(value.toFixed(2));
+}
+
+
+/**
+ * Check whether an amount belongs to a commission rule range.
+ *
+ * Example:
+ *
+ * min = 0
+ * max = 1000
+ *
+ * applies to:
+ * 0 <= amount <= 1000
+ */
+function amountMatchesRule(
+    amount: number,
+    rule: CommissionRule,
+): boolean {
+
+    const minAmount =
+        toNumber(rule.min_amount);
+
+    const maxAmount =
+        rule.max_amount === null
+            ? Infinity
+            : toNumber(rule.max_amount);
+
+    return (
+        amount >= minAmount &&
+        amount <= maxAmount
+    );
+}
+
+
+/*
+ * =========================================================
+ * TIERED COMMISSION
+ * =========================================================
+ *
+ * Example:
+ *
+ * 0 - 1000       = 5%
+ * 1000 - 5000    = 7%
+ * 5000+          = 10%
+ *
+ * Amount = 6000
+ *
+ * 1000 * 5%
+ * 4000 * 7%
+ * 1000 * 10%
+ *
+ * Total = 430
+ */
 function calculateTieredCommission(
     amount: number,
     rules: CommissionRule[],
 ): number {
 
-    if (amount <= 0 || rules.length === 0) {
+    if (
+        amount <= 0 ||
+        rules.length === 0
+    ) {
         return 0;
     }
 
-    const sortedRules = [...rules].sort(
-        (a, b) =>
-            Number(a.min_amount) -
-            Number(b.min_amount),
-    );
+    const sortedRules =
+        [...rules].sort(
+            (a, b) =>
+                toNumber(a.min_amount) -
+                toNumber(b.min_amount),
+        );
 
     let commission = 0;
 
     for (const rule of sortedRules) {
 
         const minAmount =
-            Number(rule.min_amount);
+            toNumber(rule.min_amount);
 
         const maxAmount =
             rule.max_amount === null
                 ? Infinity
-                : Number(rule.max_amount);
+                : toNumber(rule.max_amount);
 
+        /*
+         * No part of the amount is inside
+         * this tier.
+         */
         if (amount <= minAmount) {
             continue;
         }
 
+        /*
+         * Amount covered by this tier.
+         */
         const upperLimit =
             Math.min(
                 amount,
@@ -93,7 +185,9 @@ function calculateTieredCommission(
         }
 
         const rate =
-            Number(rule.commission_rate);
+            toNumber(
+                rule.commission_rate,
+            );
 
         commission +=
             tierAmount *
@@ -101,22 +195,64 @@ function calculateTieredCommission(
             100;
     }
 
-    return Number(
-        commission.toFixed(2),
+    return roundMoney(commission);
+}
+
+
+/*
+ * =========================================================
+ * PRODUCT OVERRIDE COMMISSION
+ * =========================================================
+ *
+ * Product override has priority over tiered rules.
+ *
+ * Example:
+ *
+ * Product: FLIGHT
+ * Override rate: 8%
+ *
+ * Booking amount = 500
+ *
+ * Commission = 500 * 8% = 40
+ */
+function calculateProductOverrideCommission(
+    amount: number,
+    rule: CommissionRule,
+): number {
+
+    if (
+        amount <= 0 ||
+        !amountMatchesRule(
+            amount,
+            rule,
+        )
+    ) {
+        return 0;
+    }
+
+    const rate =
+        toNumber(
+            rule.commission_rate,
+        );
+
+    return roundMoney(
+        amount *
+        rate /
+        100,
     );
 }
 
 
 /*
- * ---------------------------------------------------------
- * PRODUCT OVERRIDE
- * ---------------------------------------------------------
+ * =========================================================
+ * GET PRODUCT OVERRIDE RULE
+ * =========================================================
  */
-
 async function getProductOverrideRule(
     companyId: string,
     productCode: string,
     bookingDate: string,
+    amount: number,
 ): Promise<CommissionRule | null> {
 
     const rules =
@@ -133,8 +269,11 @@ async function getProductOverrideRule(
             FROM commission_rules
 
             WHERE company_id = $1
+
               AND rule_type = 'PRODUCT_OVERRIDE'
+
               AND product_code = $2
+
               AND effective_from <= $3::date
 
               AND (
@@ -142,7 +281,16 @@ async function getProductOverrideRule(
                     OR effective_to >= $3::date
               )
 
-            ORDER BY effective_from DESC
+              AND min_amount <= $4::numeric
+
+              AND (
+                    max_amount IS NULL
+                    OR max_amount >= $4::numeric
+              )
+
+            ORDER BY
+                effective_from DESC,
+                min_amount DESC
 
             LIMIT 1
             `,
@@ -150,6 +298,7 @@ async function getProductOverrideRule(
                 companyId,
                 productCode,
                 bookingDate,
+                amount,
             ],
         );
 
@@ -158,11 +307,10 @@ async function getProductOverrideRule(
 
 
 /*
- * ---------------------------------------------------------
- * TIERED RULES
- * ---------------------------------------------------------
+ * =========================================================
+ * GET TIERED RULES
+ * =========================================================
  */
-
 async function getTieredRules(
     companyId: string,
     bookingDate: string,
@@ -181,8 +329,11 @@ async function getTieredRules(
         FROM commission_rules
 
         WHERE company_id = $1
+
           AND rule_type = 'TIERED'
+
           AND product_code IS NULL
+
           AND effective_from <= $2::date
 
           AND (
@@ -190,7 +341,8 @@ async function getTieredRules(
                 OR effective_to >= $2::date
           )
 
-        ORDER BY min_amount ASC
+        ORDER BY
+            min_amount ASC
         `,
         [
             companyId,
@@ -201,27 +353,355 @@ async function getTieredRules(
 
 
 /*
- * ---------------------------------------------------------
- * CREATE PAYOUT RUN
- * ---------------------------------------------------------
+ * =========================================================
+ * GET BOOKINGS
+ * =========================================================
  */
+async function getBookingsForPayout(
+    companyId: string,
+    periodStart: string,
+    periodEnd: string,
+): Promise<BookingRecord[]> {
 
+    return query<BookingRecord>(
+        `
+        SELECT
+            id,
+            agent_code,
+            product_code,
+            booking_date,
+            amount,
+            currency
+
+        FROM bookings
+
+        WHERE company_id = $1
+
+          AND booking_date >= $2::date
+
+          AND booking_date <= $3::date
+
+          AND status = 'ACTIVE'
+
+        ORDER BY
+            agent_code,
+            booking_date,
+            product_code,
+            id
+        `,
+        [
+            companyId,
+            periodStart,
+            periodEnd,
+        ],
+    );
+}
+
+
+/*
+ * =========================================================
+ * GET BOOKING GROUPS
+ * =========================================================
+ */
+async function getBookingGroupsForPayout(
+    companyId: string,
+    periodStart: string,
+    periodEnd: string,
+): Promise<BookingGroup[]> {
+
+    return query<BookingGroup>(
+        `
+        SELECT
+            agent_code,
+            product_code,
+            booking_date,
+
+            COUNT(*)::integer
+                AS booking_count,
+
+            COALESCE(
+                SUM(amount),
+                0
+            )::numeric
+                AS gross_volume
+
+        FROM bookings
+
+        WHERE company_id = $1
+
+          AND booking_date >= $2::date
+
+          AND booking_date <= $3::date
+
+          AND status = 'ACTIVE'
+
+        GROUP BY
+            agent_code,
+            product_code,
+            booking_date
+
+        ORDER BY
+            agent_code,
+            booking_date,
+            product_code
+        `,
+        [
+            companyId,
+            periodStart,
+            periodEnd,
+        ],
+    );
+}
+
+
+/*
+ * =========================================================
+ * CREATE PAYOUT -> BOOKING MAPPING
+ * =========================================================
+ */
+async function createPayoutBookingMappings(
+    payoutRunId: string,
+    bookings: BookingRecord[],
+): Promise<void> {
+
+    for (const booking of bookings) {
+
+        const mappingId =
+            `payout_booking_${randomUUID()}`;
+
+        await query(
+            `
+            INSERT INTO payout_booking_items (
+                id,
+                payout_run_id,
+                booking_id
+            )
+
+            VALUES (
+                $1,
+                $2,
+                $3
+            )
+
+            ON CONFLICT (
+                payout_run_id,
+                booking_id
+            )
+
+            DO NOTHING
+            `,
+            [
+                mappingId,
+                payoutRunId,
+                booking.id,
+            ],
+        );
+    }
+}
+
+
+/*
+ * =========================================================
+ * CALCULATE AGENT COMMISSION
+ * =========================================================
+ *
+ * Commission is calculated using the booking date.
+ *
+ * For each agent:
+ *
+ * 1. Check product override.
+ * 2. If override exists, use it.
+ * 3. Otherwise use tiered rules.
+ *
+ * Tiered rules are calculated per booking date.
+ */
+async function calculateAgentCommission(
+    companyId: string,
+    agentBookings: BookingRecord[],
+): Promise<number> {
+
+    if (agentBookings.length === 0) {
+        return 0;
+    }
+
+    let totalCommission = 0;
+
+
+    /*
+     * -----------------------------------------------------
+     * Group bookings by date.
+     * -----------------------------------------------------
+     */
+    const bookingsByDate =
+        new Map<
+            string,
+            BookingRecord[]
+        >();
+
+    for (const booking of agentBookings) {
+
+        const existing =
+            bookingsByDate.get(
+                booking.booking_date,
+            );
+
+        if (existing) {
+
+            existing.push(
+                booking,
+            );
+
+        } else {
+
+            bookingsByDate.set(
+                booking.booking_date,
+                [booking],
+            );
+        }
+    }
+
+
+    /*
+     * -----------------------------------------------------
+     * Process each booking date.
+     * -----------------------------------------------------
+     */
+    for (
+        const [
+            bookingDate,
+            dateBookings,
+        ]
+        of bookingsByDate
+    ) {
+
+        /*
+         * Amount remaining for normal tiered
+         * calculation.
+         */
+        let normalTieredVolume = 0;
+
+
+        /*
+         * -------------------------------------------------
+         * PROCESS EACH BOOKING
+         * -------------------------------------------------
+         */
+        for (
+            const booking
+            of dateBookings
+        ) {
+
+            const amount =
+                toNumber(
+                    booking.amount,
+                );
+
+
+            /*
+             * Product override.
+             */
+            const overrideRule =
+                await getProductOverrideRule(
+                    companyId,
+                    booking.product_code,
+                    bookingDate,
+                    amount,
+                );
+
+
+            if (overrideRule) {
+
+                const commission =
+                    calculateProductOverrideCommission(
+                        amount,
+                        overrideRule,
+                    );
+
+                totalCommission +=
+                    commission;
+
+                continue;
+            }
+
+
+            /*
+             * No product override.
+             *
+             * Add booking to the normal
+             * tiered calculation.
+             */
+            normalTieredVolume +=
+                amount;
+        }
+
+
+        /*
+         * -------------------------------------------------
+         * TIERED COMMISSION
+         * -------------------------------------------------
+         */
+        if (
+            normalTieredVolume > 0
+        ) {
+
+            const tieredRules =
+                await getTieredRules(
+                    companyId,
+                    bookingDate,
+                );
+
+            if (
+                tieredRules.length > 0
+            ) {
+
+                const commission =
+                    calculateTieredCommission(
+                        normalTieredVolume,
+                        tieredRules,
+                    );
+
+                totalCommission +=
+                    commission;
+            }
+        }
+    }
+
+
+    return roundMoney(
+        totalCommission,
+    );
+}
+
+
+/*
+ * =========================================================
+ * CREATE PAYOUT RUN
+ * =========================================================
+ */
 export async function createPayoutRun(
     companyId: string,
     periodStart: string,
     periodEnd: string,
 ): Promise<PayoutRun> {
 
-    if (periodEnd < periodStart) {
+    /*
+     * Validate payout period.
+     */
+    if (
+        periodEnd < periodStart
+    ) {
+
         throw new Error(
             "INVALID_PAYOUT_PERIOD",
         );
     }
 
-    /*
-     * Get next run number.
-     */
 
+    /*
+     * -----------------------------------------------------
+     * Get next payout run number.
+     * -----------------------------------------------------
+     */
     const runNumberResult =
         await query<{
             next_run_no: number;
@@ -242,18 +722,27 @@ export async function createPayoutRun(
             ],
         );
 
+
     const runNo =
         Number(
-            runNumberResult[0]?.next_run_no ?? 1,
+            runNumberResult[0]
+                ?.next_run_no ?? 1,
         );
 
 
     /*
-     * Create payout run.
+     * -----------------------------------------------------
+     * Create DRAFT payout run.
+     *
+     * IMPORTANT:
+     *
+     * New payout runs always start as DRAFT.
+     * They are not finalised here.
+     * -----------------------------------------------------
      */
-
     const payoutRunId =
         `run_${randomUUID()}`;
+
 
     const payoutRuns =
         await query<PayoutRun>(
@@ -297,10 +786,13 @@ export async function createPayoutRun(
             ],
         );
 
+
     const payoutRun =
         payoutRuns[0];
 
+
     if (!payoutRun) {
+
         throw new Error(
             "PAYOUT_RUN_CREATION_FAILED",
         );
@@ -308,154 +800,74 @@ export async function createPayoutRun(
 
 
     /*
-     * Get bookings in payout period.
+     * -----------------------------------------------------
+     * Get all bookings.
+     * -----------------------------------------------------
      */
-
     const bookings =
-        await query<BookingGroup>(
-            `
-            SELECT
-                agent_code,
-                product_code,
-                booking_date,
-
-                COUNT(*)::integer
-                    AS booking_count,
-
-                COALESCE(
-                    SUM(amount),
-                    0
-                )::numeric
-                    AS gross_volume
-
-            FROM bookings
-
-            WHERE company_id = $1
-              AND booking_date >= $2::date
-              AND booking_date <= $3::date
-              AND status = 'ACTIVE'
-
-            GROUP BY
-                agent_code,
-                product_code,
-                booking_date
-
-            ORDER BY
-                agent_code,
-                booking_date,
-                product_code
-            `,
-            [
-                companyId,
-                periodStart,
-                periodEnd,
-            ],
+        await getBookingsForPayout(
+            companyId,
+            periodStart,
+            periodEnd,
         );
 
 
     /*
      * No bookings.
      */
+    if (
+        bookings.length === 0
+    ) {
 
-    if (bookings.length === 0) {
         return payoutRun;
     }
 
 
     /*
      * -----------------------------------------------------
-     * IMPORTANT
+     * Save payout -> booking relationships.
      *
-     * Save every booking belonging to this payout.
-     *
-     * We need the actual booking IDs here for refunds.
+     * This is important for refunds later.
      * -----------------------------------------------------
      */
-
-    const payoutBookings =
-        await query<{
-            id: string;
-            agent_code: string;
-        }>(
-            `
-            SELECT
-                id,
-                agent_code
-
-            FROM bookings
-
-            WHERE company_id = $1
-              AND booking_date >= $2::date
-              AND booking_date <= $3::date
-              AND status = 'ACTIVE'
-            `,
-            [
-                companyId,
-                periodStart,
-                periodEnd,
-            ],
-        );
+    await createPayoutBookingMappings(
+        payoutRunId,
+        bookings,
+    );
 
 
     /*
-     * Create payout -> booking mappings.
-     */
-
-    for (const booking of payoutBookings) {
-
-        const mappingId =
-            `payout_booking_${randomUUID()}`;
-
-        await query(
-            `
-            INSERT INTO payout_booking_items (
-                id,
-                payout_run_id,
-                booking_id
-            )
-
-            VALUES (
-                $1,
-                $2,
-                $3
-            )
-
-            ON CONFLICT (
-                payout_run_id,
-                booking_id
-            )
-            DO NOTHING
-            `,
-            [
-                mappingId,
-                payoutRunId,
-                booking.id,
-            ],
-        );
-    }
-
-
-    /*
+     * -----------------------------------------------------
      * Group bookings by agent.
+     * -----------------------------------------------------
      */
-
-    const agentGroups =
+    const agentBookings =
         new Map<
             string,
-            BookingGroup[]
+            BookingRecord[]
         >();
 
-    for (const booking of bookings) {
+
+    for (
+        const booking
+        of bookings
+    ) {
 
         const existing =
-            agentGroups.get(
+            agentBookings.get(
                 booking.agent_code,
             );
 
+
         if (existing) {
-            existing.push(booking);
+
+            existing.push(
+                booking,
+            );
+
         } else {
-            agentGroups.set(
+
+            agentBookings.set(
                 booking.agent_code,
                 [booking],
             );
@@ -467,181 +879,59 @@ export async function createPayoutRun(
 
 
     /*
-     * Process each agent.
+     * -----------------------------------------------------
+     * Process every agent.
+     * -----------------------------------------------------
      */
-
     for (
         const [
             agentCode,
-            agentBookings,
+            bookingsForAgent,
         ]
-        of agentGroups
+        of agentBookings
     ) {
 
-        const totalAgentVolume =
-            agentBookings.reduce(
+        /*
+         * Number of bookings.
+         */
+        const bookingCount =
+            bookingsForAgent.length;
+
+
+        /*
+         * Gross booking volume.
+         */
+        const grossVolume =
+            bookingsForAgent.reduce(
                 (
                     total,
                     booking,
                 ) =>
                     total +
-                    Number(
-                        booking.gross_volume,
-                    ),
-                0,
-            );
-
-        const totalBookingCount =
-            agentBookings.reduce(
-                (
-                    total,
-                    booking,
-                ) =>
-                    total +
-                    Number(
-                        booking.booking_count,
+                    toNumber(
+                        booking.amount,
                     ),
                 0,
             );
 
 
-        let agentCommission = 0;
+        /*
+         * Calculate commission.
+         */
+        const agentCommission =
+            await calculateAgentCommission(
+                companyId,
+                bookingsForAgent,
+            );
 
 
         /*
-         * Product overrides.
+         * If no commission exists,
+         * don't create a payout line.
          */
-
-        const processedOverrideBookings =
-            new Set<string>();
-
-        for (const booking of agentBookings) {
-
-            const productOverride =
-                await getProductOverrideRule(
-                    companyId,
-                    booking.product_code,
-                    booking.booking_date,
-                );
-
-            if (!productOverride) {
-                continue;
-            }
-
-            const bookingVolume =
-                Number(
-                    booking.gross_volume,
-                );
-
-            const rate =
-                Number(
-                    productOverride.commission_rate,
-                );
-
-            const commission =
-                Number(
-                    (
-                        bookingVolume *
-                        rate /
-                        100
-                    ).toFixed(2),
-                );
-
-            agentCommission +=
-                commission;
-
-            processedOverrideBookings.add(
-                `${booking.booking_date}_${booking.product_code}`,
-            );
-        }
-
-
-        /*
-         * Normal tiered bookings.
-         */
-
-        const normalBookings =
-            agentBookings.filter(
-                booking =>
-                    !processedOverrideBookings.has(
-                        `${booking.booking_date}_${booking.product_code}`,
-                    ),
-            );
-
-
-        const bookingsByDate =
-            new Map<
-                string,
-                BookingGroup[]
-            >();
-
-        for (
-            const booking
-            of normalBookings
+        if (
+            agentCommission <= 0
         ) {
-
-            const existing =
-                bookingsByDate.get(
-                    booking.booking_date,
-                );
-
-            if (existing) {
-                existing.push(booking);
-            } else {
-                bookingsByDate.set(
-                    booking.booking_date,
-                    [booking],
-                );
-            }
-        }
-
-
-        for (
-            const [
-                bookingDate,
-                dateBookings,
-            ]
-            of bookingsByDate
-        ) {
-
-            const dateVolume =
-                dateBookings.reduce(
-                    (
-                        total,
-                        booking,
-                    ) =>
-                        total +
-                        Number(
-                            booking.gross_volume,
-                        ),
-                    0,
-                );
-
-            const tieredRules =
-                await getTieredRules(
-                    companyId,
-                    bookingDate,
-                );
-
-            if (tieredRules.length === 0) {
-                continue;
-            }
-
-            agentCommission +=
-                calculateTieredCommission(
-                    dateVolume,
-                    tieredRules,
-                );
-        }
-
-
-        agentCommission =
-            Number(
-                agentCommission.toFixed(2),
-            );
-
-
-        if (agentCommission <= 0) {
             continue;
         }
 
@@ -650,12 +940,18 @@ export async function createPayoutRun(
             agentCommission;
 
 
+        /*
+         * Effective rate is informational.
+         *
+         * Actual commission has already been
+         * calculated from the applicable rules.
+         */
         const effectiveRate =
-            totalAgentVolume > 0
+            grossVolume > 0
                 ? Number(
                     (
                         agentCommission /
-                        totalAgentVolume *
+                        grossVolume *
                         100
                     ).toFixed(5),
                 )
@@ -663,9 +959,10 @@ export async function createPayoutRun(
 
 
         /*
-         * Check existing line.
+         * -------------------------------------------------
+         * Check existing payout line.
+         * -------------------------------------------------
          */
-
         const existingLine =
             await query<{
                 id: string;
@@ -687,10 +984,16 @@ export async function createPayoutRun(
                 ],
             );
 
+
         const currentLine =
             existingLine[0];
 
 
+        /*
+         * -------------------------------------------------
+         * Update existing line.
+         * -------------------------------------------------
+         */
         if (currentLine) {
 
             await query(
@@ -706,18 +1009,25 @@ export async function createPayoutRun(
                 WHERE id = $5
                 `,
                 [
-                    totalBookingCount,
-                    totalAgentVolume,
-                    agentCommission,
+                    bookingCount,
+                    grossVolume.toFixed(2),
+                    agentCommission.toFixed(2),
                     effectiveRate,
                     currentLine.id,
                 ],
             );
 
+
         } else {
 
+            /*
+             * -------------------------------------------------
+             * Create payout line.
+             * -------------------------------------------------
+             */
             const lineId =
                 `payout_line_${randomUUID()}`;
+
 
             await query(
                 `
@@ -745,10 +1055,10 @@ export async function createPayoutRun(
                     lineId,
                     payoutRunId,
                     agentCode,
-                    totalBookingCount,
-                    totalAgentVolume,
+                    bookingCount,
+                    grossVolume.toFixed(2),
                     effectiveRate,
-                    agentCommission,
+                    agentCommission.toFixed(2),
                 ],
             );
         }
@@ -756,9 +1066,10 @@ export async function createPayoutRun(
 
 
     /*
+     * -----------------------------------------------------
      * Update payout total.
+     * -----------------------------------------------------
      */
-
     const updatedRuns =
         await query<PayoutRun>(
             `
@@ -769,6 +1080,7 @@ export async function createPayoutRun(
 
             WHERE id = $2
               AND company_id = $3
+              AND status = 'DRAFT'
 
             RETURNING
                 id,
@@ -787,25 +1099,28 @@ export async function createPayoutRun(
             ],
         );
 
+
     const updatedRun =
         updatedRuns[0];
 
+
     if (!updatedRun) {
+
         throw new Error(
             "PAYOUT_RUN_UPDATE_FAILED",
         );
     }
+
 
     return updatedRun;
 }
 
 
 /*
- * ---------------------------------------------------------
+ * =========================================================
  * GET ALL PAYOUT RUNS
- * ---------------------------------------------------------
+ * =========================================================
  */
-
 export async function getPayoutRuns(
     companyId: string,
 ): Promise<PayoutRun[]> {
@@ -826,7 +1141,8 @@ export async function getPayoutRuns(
 
         WHERE company_id = $1
 
-        ORDER BY created_at DESC
+        ORDER BY
+            created_at DESC
         `,
         [
             companyId,
@@ -836,17 +1152,26 @@ export async function getPayoutRuns(
 
 
 /*
- * ---------------------------------------------------------
+ * =========================================================
  * GET ONE PAYOUT RUN
- * ---------------------------------------------------------
+ * =========================================================
  */
-
+/*
+ * =========================================================
+ * GET ONE PAYOUT RUN
+ * =========================================================
+ */
 export async function getPayoutRunById(
     payoutRunId: string,
     companyId: string,
-): Promise<PayoutRun | null> {
+) {
 
-    const result =
+    /*
+     * ---------------------------------------------------------
+     * GET PAYOUT RUN
+     * ---------------------------------------------------------
+     */
+    const payoutRuns =
         await query<PayoutRun>(
             `
             SELECT
@@ -872,16 +1197,437 @@ export async function getPayoutRunById(
             ],
         );
 
-    return result[0] ?? null;
+    const payoutRun =
+        payoutRuns[0];
+
+    if (!payoutRun) {
+        return null;
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * GET PAYOUT LINE ITEMS
+     *
+     * IMPORTANT:
+     *
+     * override_volume,
+     * override_commission_amount,
+     * override_rate
+     *
+     * are calculated from the payout bookings.
+     *
+     * They are NOT columns in payout_line_items.
+     * ---------------------------------------------------------
+     */
+    const lineItems =
+        await query<{
+            id: string;
+            payout_run_id: string;
+            agent_code: string;
+            booking_count: number;
+            gross_volume: string;
+
+            /*
+             * Total commission calculated for this agent.
+             */
+            commission_rate: string;
+            commission_amount: string;
+
+            /*
+             * Product override information.
+             */
+            override_volume: string;
+            override_rate: string;
+            override_commission_amount: string;
+
+            /*
+             * Normal commission after removing
+             * product override commission.
+             */
+            normal_commission_amount: string;
+            normal_rate: string;
+
+            override_applied: boolean;
+        }>(
+            `
+            SELECT
+
+                pli.id,
+
+                pli.payout_run_id,
+
+                pli.agent_code,
+
+                pli.booking_count,
+
+                pli.gross_volume,
+
+                pli.commission_rate,
+
+                pli.commission_amount,
+
+
+                /*
+                 * =================================================
+                 * OVERRIDE VOLUME
+                 * =================================================
+                 *
+                 * Only bookings matching a valid PRODUCT_OVERRIDE
+                 * rule are included.
+                 */
+                COALESCE(
+                    SUM(
+                        CASE
+                            WHEN override_rule.id IS NOT NULL
+                            THEN b.amount
+                            ELSE 0
+                        END
+                    ),
+                    0
+                )::numeric
+                    AS override_volume,
+
+
+                /*
+                 * =================================================
+                 * OVERRIDE RATE
+                 * =================================================
+                 *
+                 * If multiple products have overrides, the highest
+                 * applicable rate is shown as informational value.
+                 */
+                COALESCE(
+                    MAX(
+                        CASE
+                            WHEN override_rule.id IS NOT NULL
+                            THEN override_rule.commission_rate
+                            ELSE 0
+                        END
+                    ),
+                    0
+                )::numeric
+                    AS override_rate,
+
+
+                /*
+                 * =================================================
+                 * OVERRIDE COMMISSION
+                 * =================================================
+                 */
+                COALESCE(
+                    SUM(
+                        CASE
+                            WHEN override_rule.id IS NOT NULL
+                            THEN
+                                ROUND(
+                                    (
+                                        b.amount *
+                                        override_rule.commission_rate /
+                                        100
+                                    )::numeric,
+                                    2
+                                )
+                            ELSE 0
+                        END
+                    ),
+                    0
+                )::numeric
+                    AS override_commission_amount,
+
+
+                /*
+                 * =================================================
+                 * NORMAL COMMISSION
+                 * =================================================
+                 *
+                 * Total payout commission
+                 * minus override commission.
+                 */
+                (
+                    pli.commission_amount::numeric
+                    -
+                    COALESCE(
+                        SUM(
+                            CASE
+                                WHEN override_rule.id IS NOT NULL
+                                THEN
+                                    ROUND(
+                                        (
+                                            b.amount *
+                                            override_rule.commission_rate /
+                                            100
+                                        )::numeric,
+                                        2
+                                    )
+                                ELSE 0
+                            END
+                        ),
+                        0
+                    )
+                )::numeric
+                    AS normal_commission_amount,
+
+
+                /*
+                 * =================================================
+                 * NORMAL RATE
+                 * =================================================
+                 *
+                 * Normal commission / non-override volume.
+                 */
+                CASE
+                    WHEN
+                        (
+                            pli.gross_volume::numeric
+                            -
+                            COALESCE(
+                                SUM(
+                                    CASE
+                                        WHEN override_rule.id IS NOT NULL
+                                        THEN b.amount
+                                        ELSE 0
+                                    END
+                                ),
+                                0
+                            )
+                        ) > 0
+                    THEN
+                        (
+                            (
+                                pli.commission_amount::numeric
+                                -
+                                COALESCE(
+                                    SUM(
+                                        CASE
+                                            WHEN override_rule.id IS NOT NULL
+                                            THEN
+                                                ROUND(
+                                                    (
+                                                        b.amount *
+                                                        override_rule.commission_rate /
+                                                        100
+                                                    )::numeric,
+                                                    2
+                                                )
+                                            ELSE 0
+                                        END
+                                    ),
+                                    0
+                                )
+                            )
+                            /
+                            (
+                                pli.gross_volume::numeric
+                                -
+                                COALESCE(
+                                    SUM(
+                                        CASE
+                                            WHEN override_rule.id IS NOT NULL
+                                            THEN b.amount
+                                            ELSE 0
+                                        END
+                                    ),
+                                    0
+                                )
+                            )
+                            * 100
+                        )::numeric
+                    ELSE 0
+                END
+                    AS normal_rate,
+
+
+                /*
+                 * =================================================
+                 * OVERRIDE APPLIED
+                 * =================================================
+                 */
+                CASE
+                    WHEN COUNT(
+                        CASE
+                            WHEN override_rule.id IS NOT NULL
+                            THEN 1
+                        END
+                    ) > 0
+                    THEN true
+                    ELSE false
+                END
+                    AS override_applied
+
+
+            FROM payout_line_items pli
+
+
+            /*
+             * Payout run security.
+             */
+            INNER JOIN payout_runs pr
+                ON pr.id = pli.payout_run_id
+
+
+            /*
+             * Actual bookings included in this payout.
+             */
+            LEFT JOIN payout_booking_items pbi
+                ON pbi.payout_run_id = pr.id
+
+
+            LEFT JOIN bookings b
+                ON b.id = pbi.booking_id
+                AND b.agent_code = pli.agent_code
+                AND b.company_id = $2
+
+
+            /*
+             * =================================================
+             * FIND ONE APPLICABLE PRODUCT OVERRIDE
+             * =================================================
+             *
+             * LATERAL + LIMIT 1 prevents duplicate calculations
+             * if multiple matching rules exist.
+             */
+            LEFT JOIN LATERAL (
+                SELECT
+                    cr.id,
+                    cr.commission_rate
+
+                FROM commission_rules cr
+
+                WHERE cr.company_id = $2
+
+                  AND cr.rule_type = 'PRODUCT_OVERRIDE'
+
+                  AND cr.product_code = b.product_code
+
+                  AND cr.effective_from <= b.booking_date
+
+                  AND (
+                        cr.effective_to IS NULL
+                        OR cr.effective_to >= b.booking_date
+                  )
+
+                  AND cr.min_amount <= b.amount
+
+                  AND (
+                        cr.max_amount IS NULL
+                        OR cr.max_amount >= b.amount
+                  )
+
+                ORDER BY
+                    cr.effective_from DESC,
+                    cr.min_amount DESC
+
+                LIMIT 1
+
+            ) override_rule
+                ON true
+
+
+            WHERE pli.payout_run_id = $1
+
+              AND pr.company_id = $2
+
+
+            GROUP BY
+
+                pli.id,
+
+                pli.payout_run_id,
+
+                pli.agent_code,
+
+                pli.booking_count,
+
+                pli.gross_volume,
+
+                pli.commission_rate,
+
+                pli.commission_amount
+
+
+            ORDER BY
+                pli.agent_code
+            `,
+            [
+                payoutRunId,
+                companyId,
+            ],
+        );
+
+
+    /*
+     * ---------------------------------------------------------
+     * GET PAYOUT BOOKINGS
+     * ---------------------------------------------------------
+     */
+    const bookings =
+        await query<{
+            id: string;
+            payout_run_id: string;
+            booking_id: string;
+            agent_code: string;
+            booking_date: string;
+            amount: string;
+            currency: string;
+            product_code: string;
+        }>(
+            `
+            SELECT
+                pbi.id,
+                pbi.payout_run_id,
+                pbi.booking_id,
+
+                b.agent_code,
+                b.booking_date,
+                b.amount,
+                b.currency,
+                b.product_code
+
+            FROM payout_booking_items pbi
+
+            INNER JOIN payout_runs pr
+                ON pr.id = pbi.payout_run_id
+
+            INNER JOIN bookings b
+                ON b.id = pbi.booking_id
+
+            WHERE pbi.payout_run_id = $1
+
+              AND pr.company_id = $2
+
+              AND b.company_id = $2
+
+            ORDER BY
+                b.booking_date,
+                b.id
+            `,
+            [
+                payoutRunId,
+                companyId,
+            ],
+        );
+
+
+    /*
+     * ---------------------------------------------------------
+     * RETURN COMPLETE PAYOUT RUN
+     * ---------------------------------------------------------
+     */
+    return {
+        ...payoutRun,
+
+        lineItems,
+
+        bookings,
+    };
 }
 
-
 /*
- * ---------------------------------------------------------
+ * =========================================================
  * GET PAYOUT LINE ITEMS
- * ---------------------------------------------------------
+ * =========================================================
  */
-
 export async function getPayoutLineItems(
     payoutRunId: string,
     companyId: string,
@@ -904,9 +1650,11 @@ export async function getPayoutLineItems(
             ON pr.id = pli.payout_run_id
 
         WHERE pli.payout_run_id = $1
+
           AND pr.company_id = $2
 
-        ORDER BY pli.agent_code
+        ORDER BY
+            pli.agent_code
         `,
         [
             payoutRunId,
@@ -917,11 +1665,16 @@ export async function getPayoutLineItems(
 
 
 /*
- * ---------------------------------------------------------
+ * =========================================================
  * GET PAYOUT BOOKINGS
- * ---------------------------------------------------------
+ * =========================================================
+ *
+ * This is especially important for refunds.
+ *
+ * It tells us exactly which bookings were included
+ * in a payout run.
+ * =========================================================
  */
-
 export async function getPayoutBookings(
     payoutRunId: string,
     companyId: string,
@@ -933,6 +1686,7 @@ export async function getPayoutBookings(
             pbi.id,
             pbi.payout_run_id,
             pbi.booking_id,
+
             b.agent_code,
             b.booking_date,
             b.amount,
@@ -948,10 +1702,14 @@ export async function getPayoutBookings(
             ON b.id = pbi.booking_id
 
         WHERE pbi.payout_run_id = $1
+
           AND pr.company_id = $2
+
           AND b.company_id = $2
 
-        ORDER BY b.booking_date
+        ORDER BY
+            b.booking_date,
+            b.id
         `,
         [
             payoutRunId,
@@ -962,11 +1720,48 @@ export async function getPayoutBookings(
 
 
 /*
+ * =========================================================
+ * GET PAYOUTS FOR AUTHENTICATED AGENT
+ * =========================================================
+ */
+/*
  * ---------------------------------------------------------
  * GET PAYOUTS FOR AUTHENTICATED AGENT
+ *
+ * Returns:
+ * - total commission
+ * - product override rate
+ * - product override commission
+ *
+ * The agent is identified from the authenticated user.
+ * No agentCode is accepted from the frontend.
  * ---------------------------------------------------------
  */
-
+/*
+ * =========================================================
+ * GET PAYOUTS FOR AUTHENTICATED AGENT
+ * =========================================================
+ *
+ * Returns:
+ *
+ * - normal commission
+ * - override rate
+ * - override volume
+ * - override commission
+ * - whether override was actually applied
+ *
+ * IMPORTANT:
+ *
+ * A PRODUCT_OVERRIDE is considered applicable only when:
+ *
+ * 1. Product matches
+ * 2. Booking date is within effective period
+ * 3. Booking amount >= min_amount
+ * 4. Booking amount <= max_amount
+ *
+ * The frontend does NOT send agent_code.
+ * The agent is identified using the authenticated userId.
+ */
 export async function getAgentPayouts(
     companyId: string,
     userId: string,
@@ -978,39 +1773,256 @@ export async function getAgentPayouts(
         period_start: string;
         period_end: string;
         status: "DRAFT" | "FINALISED";
+
         agent_code: string;
+
         booking_count: number;
         gross_volume: string;
+
         commission_rate: string;
         commission_amount: string;
+
+        override_volume: string;
+        override_rate: string;
+        override_commission_amount: string;
+
+        override_applied: boolean;
+
+        created_at: string;
     }>(
         `
         SELECT
+
             pr.id AS payout_run_id,
+
             pr.run_no,
+
             pr.period_start,
+
             pr.period_end,
+
             pr.status,
 
+            pr.created_at,
+
             pli.agent_code,
+
             pli.booking_count,
+
             pli.gross_volume,
+
             pli.commission_rate,
-            pli.commission_amount
+
+            pli.commission_amount,
+
+
+            /*
+             * =================================================
+             * OVERRIDE VOLUME
+             *
+             * Only count a booking as override volume when:
+             *
+             * 1. Product matches
+             * 2. Date matches
+             * 3. Minimum amount matches
+             * 4. Maximum amount matches
+             *
+             * This MUST use the same rules as the payout
+             * calculation.
+             * =================================================
+             */
+
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN cr.id IS NOT NULL
+                        THEN b.amount
+                        ELSE 0
+                    END
+                ),
+                0
+            )::numeric AS override_volume,
+
+
+            /*
+             * =================================================
+             * OVERRIDE RATE
+             * =================================================
+             */
+
+            COALESCE(
+                MAX(
+                    CASE
+                        WHEN cr.id IS NOT NULL
+                        THEN cr.commission_rate
+                    END
+                ),
+                0
+            ) AS override_rate,
+
+
+            /*
+             * =================================================
+             * OVERRIDE COMMISSION
+             *
+             * booking amount × override %
+             * =================================================
+             */
+
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN cr.id IS NOT NULL
+                        THEN
+                            b.amount *
+                            cr.commission_rate /
+                            100
+                        ELSE 0
+                    END
+                ),
+                0
+            )::numeric AS override_commission_amount,
+
+
+            /*
+             * =================================================
+             * OVERRIDE APPLIED
+             * =================================================
+             */
+
+            CASE
+                WHEN COUNT(
+                    CASE
+                        WHEN cr.id IS NOT NULL
+                        THEN 1
+                    END
+                ) > 0
+                THEN true
+                ELSE false
+            END AS override_applied
+
 
         FROM agents a
+
+
+        /*
+         * Agent payout line
+         */
 
         INNER JOIN payout_line_items pli
             ON pli.agent_code = a.agent_code
 
+
+        /*
+         * Payout run
+         */
+
         INNER JOIN payout_runs pr
             ON pr.id = pli.payout_run_id
 
+
+        /*
+         * Bookings included in this payout
+         */
+
+        LEFT JOIN payout_booking_items pbi
+            ON pbi.payout_run_id = pr.id
+
+
+        LEFT JOIN bookings b
+            ON b.id = pbi.booking_id
+
+            AND b.agent_code = pli.agent_code
+
+            AND b.company_id = $2
+
+
+        /*
+         * =================================================
+         * PRODUCT OVERRIDE RULE
+         *
+         * IMPORTANT:
+         *
+         * We check ALL conditions here.
+         * =================================================
+         */
+
+        LEFT JOIN commission_rules cr
+            ON cr.company_id = $2
+
+            AND cr.rule_type = 'PRODUCT_OVERRIDE'
+
+
+            /*
+             * Product must match
+             */
+
+            AND cr.product_code = b.product_code
+
+
+            /*
+             * Effective date
+             */
+
+            AND cr.effective_from <= b.booking_date
+
+            AND (
+                cr.effective_to IS NULL
+                OR cr.effective_to >= b.booking_date
+            )
+
+
+            /*
+             * Minimum amount
+             */
+
+            AND cr.min_amount <= b.amount
+
+
+            /*
+             * Maximum amount
+             */
+
+            AND (
+                cr.max_amount IS NULL
+                OR cr.max_amount >= b.amount
+            )
+
+
         WHERE a.user_id = $1
+
           AND a.company_id = $2
+
           AND pr.company_id = $2
 
-        ORDER BY pr.created_at DESC
+
+        GROUP BY
+
+            pr.id,
+
+            pr.run_no,
+
+            pr.period_start,
+
+            pr.period_end,
+
+            pr.status,
+
+            pr.created_at,
+
+            pli.agent_code,
+
+            pli.booking_count,
+
+            pli.gross_volume,
+
+            pli.commission_rate,
+
+            pli.commission_amount
+
+
+        ORDER BY
+            pr.created_at DESC
         `,
         [
             userId,

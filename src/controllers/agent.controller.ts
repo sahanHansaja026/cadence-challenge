@@ -12,6 +12,7 @@ import {
     getMyAgentProfile,
     createMyAgentProfile,
     updateMyAgentProfile,
+    getAllAgents,
 } from "../services/agent.service";
 
 
@@ -281,6 +282,54 @@ export async function updateMyAgentController(
                     "AGENT_PROFILE_UPDATE_FAILED",
                 message:
                     "Failed to update agent profile.",
+            },
+        });
+    }
+}
+
+/*
+ * GET /api/agents
+ *
+ * Admin gets all agents in their company
+ */
+export async function getAllAgentsController(
+    req: Request,
+    res: Response,
+): Promise<void> {
+
+    if (!req.user) {
+        res.status(401).json({
+            error: {
+                code: "UNAUTHORIZED",
+                message: "Authentication required.",
+            },
+        });
+
+        return;
+    }
+
+    try {
+        const agents = await getAllAgents(
+            req.user.companyId,
+        );
+
+        res.status(200).json({
+            data: {
+                agents,
+            },
+        });
+
+    } catch (error: unknown) {
+
+        console.error(
+            "Get all agents error:",
+            error,
+        );
+
+        res.status(500).json({
+            error: {
+                code: "AGENTS_FETCH_FAILED",
+                message: "Failed to load agents.",
             },
         });
     }

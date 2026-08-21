@@ -15,6 +15,7 @@ import reportRoutes from "./routes/report.routes";
 
 import exchangeRateRoutes from "./routes/exchange-rate.routes";
 import passwordRoutes from "./routes/password.routes";
+import teamRoutes from "./routes/team.routes";
 
 
 const app = express();
@@ -24,6 +25,12 @@ app.use(
     }),
 );
 app.use(express.json());
+// team
+app.use(
+    "/api/teams",
+    teamRoutes,
+);
+
 // exchange
 app.use(
     "/api/exchange-rates",
