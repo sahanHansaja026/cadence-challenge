@@ -14,6 +14,7 @@ import {
 import SidebarAgent from "../../component/layout/sidebar-agent";
 
 import api from "../../services/api";
+import SidebarFinance from "../../component/layout/sidebar-finace";
 
 
 /*

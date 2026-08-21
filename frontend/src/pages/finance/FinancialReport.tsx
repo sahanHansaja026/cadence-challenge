@@ -14,6 +14,7 @@ import {
 import SidebarAdmin from "../../component/layout/sidebar-admin";
 
 import api from "../../services/api";
+import SidebarFinance from "../../component/layout/sidebar-finace";
 
 
 /*
@@ -285,25 +286,11 @@ function Reports() {
 
         <div className="flex min-h-screen bg-gray-50">
 
-            {/* =================================================
-                SIDEBAR
-            ================================================= */}
-
-            <SidebarAdmin
+            <SidebarFinance
                 activeItem="Reports & Statements"
             />
 
-
-            {/* =================================================
-                MAIN
-            ================================================= */}
-
             <main className="flex-1 p-8">
-
-
-                {/* =================================================
-                    HEADER
-                ================================================= */}
 
                 <div className="mb-8 flex items-start justify-between">
 
@@ -342,11 +329,6 @@ function Reports() {
                     </button>
 
                 </div>
-
-
-                {/* =================================================
-                    ERROR
-                ================================================= */}
 
                 {!loading &&
                     error && (

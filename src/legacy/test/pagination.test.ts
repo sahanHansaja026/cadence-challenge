@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { toOffset } from '../pagination';
+import { toOffset } from '../correct/pagination';
+
 
 describe('toOffset', () => {
     it('should return offset 0 for the first page', () => {

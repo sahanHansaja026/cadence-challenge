@@ -74,7 +74,33 @@ The test currently fails with:
 
 **Regression test:** 
 
+## D4 — Concurrent payout runs can receive the same run number
+
+**Location:** `src/legacy/runNumber.ts:7-14`
+
+**Severity:** High
+
+**Reproduction:** Create two payout runs for the same company concurrently when the current maximum run number is 5. Both calls to `nextRunNumber()` can read `MAX(run_no) = 5` and calculate the next number as 6. Both payout runs are then created with `run_no = 6`.
+
+The regression test is:
+`src/legacy/test/runNumber.test.ts::should generate different run numbers for concurrent payout runs`
+
+The test currently fails with:
+
+`Expected: not 6`
+
+`Received: 6`
+
+**Root cause:** `nextRunNumber()` calculates the next number using `MAX(run_no) + 1` in a separate query before the payout run is inserted. Concurrent requests can read the same maximum value before either insert occurs, causing both requests to generate the same run number.
+
+**Impact:** Two payout runs belonging to the same company can receive the same run number. Since run numbers are used to identify payout runs and appear on payslips, duplicate numbers can cause ambiguity and incorrect payout identification.
+
+**Fix:** 
+
+**Regression test:** 
+
 ## Anything you looked at and decided was *not* a defect
 
 Worth writing down. Ruling something out deliberately is as much a signal as finding a
 bug.
+
