@@ -8,8 +8,8 @@ a defect. "Given input X the function returns Y and it should return Z" is.
 ## D1 — [short title]
 
 **Location:** `src/legacy/<file>.ts:<line>`
-**Severity:** Critical | High | Medium | Low — and say whether it is a **security** issue
-**Reproduction:** the exact input, and the wrong output it produces
+**Severity:** High **security** issue
+**Reproduction:** Start the backend.Send the following request
 **Root cause:** what is actually wrong, not what the symptom is
 **Impact:** who is affected and how badly. For money bugs, quantify it
 **Fix:** what you changed and why that is the right fix
