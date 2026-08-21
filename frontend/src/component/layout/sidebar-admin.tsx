@@ -10,26 +10,28 @@ const menuItems = [
     "Dashboard",
     "User Management",
     "view users",
+    "Team Management",
     "Booking Imports",
     "Booking Details",
     "Commission Rules",
     "Payout Runs",
     "Refunds",
     "Reports & Statements",
-    
+
 ];
 
 const routes: Record<string, string> = {
     "Dashboard": "/admin/dashboard",
     "User Management": "/usermangemtn",
-    "view users":"/viewusers",
+    "view users": "/viewusers",
+    "Team Management":"/teammanagement",
     "Booking Imports": "/bookinginfo",
     "Booking Details": "/viewbookings",
     "Commission Rules": "/commtionrule",
-    "Payout Runs": "/admin/payout-runs",
-    "Refunds": "/admin/refunds",
-    "Reports & Statements": "/admin/reports",
-    "Settings": "/admin/settings",
+    "Payout Runs": "/payoutrun",
+    "Refunds": "/refundadmin",
+    "Reports & Statements": "/reportadmin",
+
 };
 
 const SidebarAdmin: React.FC<SidebarProps> = ({
@@ -82,8 +84,8 @@ const SidebarAdmin: React.FC<SidebarProps> = ({
                                     handleNavigation(item)
                                 }
                                 className={`w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium transition ${isActive
-                                        ? "bg-gray-900 text-white"
-                                        : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                                    ? "bg-gray-900 text-white"
+                                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                                     }`}
                             >
                                 {item}
@@ -100,7 +102,7 @@ const SidebarAdmin: React.FC<SidebarProps> = ({
                 <button
                     type="button"
                     onClick={() =>
-                        handleNavigation("Settings")
+                        navigate("/settings")
                     }
                     className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                 >

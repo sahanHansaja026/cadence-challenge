@@ -12,23 +12,23 @@ const menuItems = [
     },
     {
         label: "Booking Imports",
-        path: "/finance/booking-imports",
+        path: "/booking_finace",
     },
     {
         label: "Booking View",
         path: "/viewbookings_finace",
     },
     {
-        label: "Commission Rules",
-        path: "/finance/commission-rules",
-    },
-    {
         label: "Payout Runs",
-        path: "/finance/payout-runs",
+        path: "/payoutrun_finace",
     },
     {
         label: "Refunds",
-        path: "/finance/refunds",
+        path: "/refundfinace",
+    },
+    {
+        label: "Exchage rate",
+        path: "/exchagerateinsert",
     },
     {
         label: "Financial Reports",
