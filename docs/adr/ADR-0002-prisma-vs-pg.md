@@ -1,50 +1,61 @@
 # ADR-0002: Prisma vs. Raw pg Driver
 
-**Date:** 2026-08-12
-**Status:** Accepted
+**Date:** 2026-08-12  
+**Status:** Accepted  
 **Decider:** Sahan Hansaja
 
 ## Context
 
 The Cadence backend needs to communicate with PostgreSQL.
 
-Two possible approaches were considered: Prisma ORM and the raw `pg` PostgreSQL driver.
+Two possible approaches were considered: Prisma ORM and the raw `pg`
+PostgreSQL driver.
 
-The application contains several related entities, such as sales representatives, sales, commissions, and payout runs. Managing these relationships and database queries directly with SQL can require more manual code.
+The application contains several related entities, including companies,
+users, agents, bookings, commission rules, refunds, and payout runs.
 
-A decision is needed before implementing the database layer.
+A database access approach is required that provides sufficient control
+over PostgreSQL queries while keeping the backend implementation simple
+for the scope of the assignment.
 
 ## Decision
 
-We will use Prisma ORM for database access.
+We will use the raw `pg` PostgreSQL driver for database access.
 
-Prisma will be responsible for communicating with PostgreSQL and managing the application's database models and queries.
+The application will use PostgreSQL directly through the Node.js `pg`
+package and a shared database query helper.
+
+SQL queries will be kept inside the service/database layer rather than
+being placed directly inside controllers.
 
 ## Consequences
 
 ### Positive
 
-- Provides a clear schema for the application's database models.
-- Makes relationships between entities easier to work with.
-- Provides type-safe database queries.
-- Reduces the amount of raw SQL that needs to be written.
-- Makes database migrations easier to manage.
+- Gives direct control over PostgreSQL queries.
+- Keeps the database layer lightweight.
+- No ORM abstraction is required.
+- PostgreSQL-specific features can be used directly.
+- Queries are explicit and easy to inspect.
+- Reduces additional tooling and dependencies.
 
 ### Negative / Trade-offs
 
-- Adds Prisma as an additional dependency and abstraction layer.
-- Developers need to learn Prisma's API and workflow.
-- Some complex PostgreSQL queries may still require raw SQL.
-- The application becomes more dependent on Prisma's tooling.
+- More SQL must be written manually.
+- Database relationships and joins must be handled explicitly.
+- Type safety for query results must be maintained manually.
+- Database migrations need to be managed separately.
+- More responsibility is placed on developers to write safe and
+  efficient SQL queries.
 
 ## Alternatives Considered
 
-| Option   | Why rejected |
-| -------- | ------------ |
-| Raw pg driver | Requires more manual SQL and database handling for the application's related entities.        |
+| Option     | Why rejected                                                                                                                                                                                         |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prisma ORM | Adds an additional ORM abstraction that is not necessary for the current scope. The application requires direct PostgreSQL queries and the team is comfortable managing SQL through the `pg` driver. |
+
+## Implementation
+
+The backend uses the Node.js `pg` package with a shared connection pool.
 
 
-## References
-
-* `docs/reference/ADR_PROCESS.md`
-* Prisma documentation
