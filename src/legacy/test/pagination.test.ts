@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { toOffset } from '../correct/pagination';
+import { toOffset } from '../pagination';
+
 
 
 describe('toOffset', () => {

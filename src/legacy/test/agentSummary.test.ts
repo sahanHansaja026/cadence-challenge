@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { summariseAgent } from '../agentSummary';
+
 import type { BookingRecord } from '../bookingRepository';
+import { summariseAgent } from '../agentSummary';
+
 
 describe('summariseAgent', () => {
     it('calculates gross and commission for bookings in the requested period', () => {

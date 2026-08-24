@@ -14,6 +14,21 @@ export interface RawCsvRow {
 }
 
 /**
+ * Converts a partner CSV date from DD/MM/YYYY to ISO YYYY-MM-DD.
+ */
+function csvDateToIso(date: string): string | null {
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(date);
+
+  if (!match) {
+    return null;
+  }
+
+  const [, day, month, year] = match;
+
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * @param periodStart ISO `YYYY-MM-DD`
  * @param periodEnd   ISO `YYYY-MM-DD`
  */
@@ -22,7 +37,18 @@ export function filterCsvRowsByPeriod(
   periodStart: string,
   periodEnd: string,
 ): RawCsvRow[] {
-  return rows.filter((row) => row.date >= periodStart && row.date <= periodEnd);
+  return rows.filter((row) => {
+    const rowDate = csvDateToIso(row.date);
+
+    if (rowDate === null) {
+      return false;
+    }
+
+    return (
+      rowDate >= periodStart &&
+      rowDate <= periodEnd
+    );
+  });
 }
 
 export function countRowsInPeriod(
@@ -30,5 +56,9 @@ export function countRowsInPeriod(
   periodStart: string,
   periodEnd: string,
 ): number {
-  return filterCsvRowsByPeriod(rows, periodStart, periodEnd).length;
+  return filterCsvRowsByPeriod(
+    rows,
+    periodStart,
+    periodEnd,
+  ).length;
 }

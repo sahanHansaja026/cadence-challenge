@@ -4,10 +4,9 @@ import {
     it,
     vi,
 } from "vitest";
+import { findBookingsByAgentCode } from "../bookingRepository";
 
-import {
-    findBookingsByAgentCode,
-} from "../correct/bookingRepository";
+
 
 
 describe(

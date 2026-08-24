@@ -1,5 +1,10 @@
-import type { Pool } from 'pg';
-import { findBookingsByAgentCode, type BookingRecord } from './bookingRepository';
+import type { Pool } from "pg";
+
+import {
+  findBookingsByAgentCode,
+  type BookingRecord,
+} from "./bookingRepository";
+
 
 export interface AgentSummary {
   agentCode: string;
@@ -8,15 +13,43 @@ export interface AgentSummary {
   commission: number;
 }
 
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
-}
 
 /**
- * Totals one agent's bookings for a period and applies a flat rate.
+ * Round a number to two decimal places.
+ */
+function round2(
+  value: number,
+): number {
+
+  return Math.round(
+    (value + Number.EPSILON) * 100,
+  ) / 100;
+}
+
+
+/**
+ * Validate an ISO date.
+ */
+function isValidIsoDate(
+  value: string,
+): boolean {
+
+  return /^\d{4}-\d{2}-\d{2}$/.test(
+    value,
+  );
+}
+
+
+/**
+ * Totals one agent's bookings for a period
+ * and applies a flat commission rate.
  *
- * `periodStart` / `periodEnd` are ISO `YYYY-MM-DD` and the comparison relies on ISO
- * strings sorting in date order.
+ * periodStart / periodEnd:
+ * YYYY-MM-DD
+ *
+ * rate:
+ * Decimal value such as:
+ * 0.05 = 5%
  */
 export function summariseAgent(
   agentCode: string,
@@ -25,23 +58,107 @@ export function summariseAgent(
   periodStart: string,
   periodEnd: string,
 ): AgentSummary {
-  const inPeriod = bookings.filter(
-    (booking) => booking.booking_date >= periodStart && booking.booking_date <= periodEnd,
-  );
+
+  if (!agentCode.trim()) {
+
+    throw new Error(
+      "Agent code is required.",
+    );
+
+  }
+
+
+  if (
+    !isValidIsoDate(periodStart) ||
+    !isValidIsoDate(periodEnd)
+  ) {
+
+    throw new Error(
+      "Period dates must use YYYY-MM-DD format.",
+    );
+
+  }
+
+
+  if (periodStart > periodEnd) {
+
+    throw new Error(
+      "Period start date cannot be after period end date.",
+    );
+
+  }
+
+
+  if (
+    !Number.isFinite(rate) ||
+    rate < 0
+  ) {
+
+    throw new Error(
+      "Commission rate must be a valid non-negative number.",
+    );
+
+  }
+
+
+  const inPeriod =
+    bookings.filter(
+      (booking) =>
+        booking.agent_code === agentCode &&
+        booking.booking_date >= periodStart &&
+        booking.booking_date <= periodEnd,
+    );
+
 
   let gross = 0;
+
+
   for (const booking of inPeriod) {
-    gross += Number(booking.amount);
+
+    const amount =
+      Number(booking.amount);
+
+
+    if (!Number.isFinite(amount)) {
+
+      throw new Error(
+        `Invalid booking amount for booking ${booking.id}.`,
+      );
+
+    }
+
+
+    gross += amount;
+
   }
+
+
+  const roundedGross =
+    round2(gross);
+
+
+  const commission =
+    round2(
+      roundedGross * rate,
+    );
+
 
   return {
     agentCode,
     bookingCount: inPeriod.length,
-    gross: round2(gross),
-    commission: round2(gross * rate),
+    gross: roundedGross,
+    commission,
   };
 }
 
+
+/**
+ * Loads an agent's bookings for the requested company
+ * and creates the agent summary for the requested period.
+ *
+ * The companyId is passed to findBookingsByAgentCode()
+ * to maintain tenant isolation.
+ */
 export async function buildAgentSummary(
   pool: Pool,
   companyId: string,
@@ -50,6 +167,29 @@ export async function buildAgentSummary(
   periodStart: string,
   periodEnd: string,
 ): Promise<AgentSummary> {
-  const bookings = await findBookingsByAgentCode(pool, companyId, agentCode);
-  return summariseAgent(agentCode, bookings, rate, periodStart, periodEnd);
+
+  if (!companyId.trim()) {
+
+    throw new Error(
+      "Company ID is required.",
+    );
+
+  }
+
+
+  const bookings =
+    await findBookingsByAgentCode(
+      pool,
+      companyId,
+      agentCode,
+    );
+
+
+  return summariseAgent(
+    agentCode,
+    bookings,
+    rate,
+    periodStart,
+    periodEnd,
+  );
 }
