@@ -1,0 +1,355 @@
+{
+  "info": {
+    "_postman_id": "6d55c68c-6512-4002-86da-80c121d431ba",
+    "name": "task_payout",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "34982758"
+  },
+  "item": [
+    {
+      "name": "login admin",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"email\": \"admin@madmarketing.com\",\r\n  \"password\": \"Password123!\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:3001/api/auth/login",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3001",
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "payout run creation",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{supabase_service_role_api_key_0ngy}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"periodStart\": \"2026-08-01\",\r\n  \"periodEnd\": \"2026-08-31\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:3001/api/payout-runs",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3001",
+          "path": [
+            "api",
+            "payout-runs"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "import bokking",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{supabase_service_role_api_key_1c5k}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "uuid": "435a4cb5-ce77-465d-a1a7-cea39d2f6b57",
+              "src": "/C:/Users/sahan/Desktop/cadence-challenge/fixtures/bookings-2026-03.csv"
+            }
+          ]
+        },
+        "url": {
+          "raw": "http://localhost:3001/api/bookings/import",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3001",
+          "path": [
+            "api",
+            "bookings",
+            "import"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "missing csv add",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{supabase_service_role_api_key_1c5k}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "uuid": "8b028f3b-477a-42f1-bb04-a43bc93a8266",
+              "value": null
+            }
+          ]
+        },
+        "url": {
+          "raw": "http://localhost:3001/api/bookings/import",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3001",
+          "path": [
+            "api",
+            "bookings",
+            "import"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "get all bookings to admin",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{json_web_token_0a29}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3001/api/bookings",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3001",
+          "path": [
+            "api",
+            "bookings"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "get all booking by agent",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{json_web_token_10xk}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3001/api/bookings",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3001",
+          "path": [
+            "api",
+            "bookings"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "check booking by id using defferent  compay token",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{auth_secret_0avy}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3001/api/bookings/booking_faf55c0d-c7f0-4965-9dbc-6a7dc607c03b",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3001",
+          "path": [
+            "api",
+            "bookings",
+            "booking_faf55c0d-c7f0-4965-9dbc-6a7dc607c03b"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "update booking by admin using booking id",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{supabase_service_role_api_key_16it}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "PATCH",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"booking_date\": \"2026-03-20\",\r\n  \"amount\": \"75000.00\",\r\n  \"product_code\": \"TRAVEL\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:3001/api/bookings/booking_faf55c0d-c7f0-4965-9dbc-6a7dc607c03b",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3001",
+          "path": [
+            "api",
+            "bookings",
+            "booking_faf55c0d-c7f0-4965-9dbc-6a7dc607c03b"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "get booking by id",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{json_web_token_16it}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3001/api/bookings/booking_faf55c0d-c7f0-4965-9dbc-6a7dc607c03b",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3001",
+          "path": [
+            "api",
+            "bookings",
+            "booking_faf55c0d-c7f0-4965-9dbc-6a7dc607c03b"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "supabase_service_role_api_key_0ngy",
+      "secret": true
+    },
+    {
+      "key": "supabase_service_role_api_key_1c5k",
+      "secret": true
+    },
+    {
+      "key": "json_web_token_0a29",
+      "secret": true
+    },
+    {
+      "key": "json_web_token_10xk",
+      "secret": true
+    },
+    {
+      "key": "auth_secret_0avy",
+      "secret": true
+    },
+    {
+      "key": "supabase_service_role_api_key_16it",
+      "secret": true
+    },
+    {
+      "key": "json_web_token_16it",
+      "secret": true
+    }
+  ]
+}
